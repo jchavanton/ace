@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -32,6 +33,7 @@ func (s *Server) Register(r *gin.Engine) {
 	r.POST("/scenarios/:name/run", s.handleRun)
 	r.GET("/runs", s.handleRuns)
 	r.GET("/runs/:id", s.handleRunDetail)
+	r.GET("/runs/:id/log", s.handleRunLog)
 	r.GET("/runs/:id/wav/:file", s.handleRunWAV)
 }
 
@@ -122,13 +124,54 @@ func (s *Server) handleRunDetail(c *gin.Context) {
 		c.String(http.StatusNotFound, "run %q: %v", id, err)
 		return
 	}
+	// Read the last 200 lines of voip_patrol's log so the detail page
+	// can show what's happening live. ReadFile error is ignored — empty
+	// log is the running-but-no-output-yet state.
+	logBytes, _ := os.ReadFile(filepath.Join(run.Dir(s.Cfg.RunsDir), "stdout.log"))
 	c.HTML(http.StatusOK, "layout", gin.H{
 		"Title":           "Run " + run.ID,
 		"Page":            "runs",
 		"ContentTemplate": "content_run_detail",
 		"Run":             run,
 		"WAVs":            run.WAVFiles(s.Cfg.RunsDir),
+		"LogTail":         tailLines(string(logBytes), 200),
+		"LogBytes":        len(logBytes),
 	})
+}
+
+// handleRunLog serves the run's stdout.log as plain text. Optional
+// `?tail=N` returns the last N lines (default: full file). Useful both
+// directly (operators tailing via curl) and as a fallback when the
+// detail page's inline log preview gets truncated.
+func (s *Server) handleRunLog(c *gin.Context) {
+	id := c.Param("id")
+	run, err := models.LoadRun(s.Cfg.RunsDir, id)
+	if err != nil {
+		c.String(http.StatusNotFound, "run %q: %v", id, err)
+		return
+	}
+	body, _ := os.ReadFile(filepath.Join(run.Dir(s.Cfg.RunsDir), "stdout.log"))
+	if tail := c.Query("tail"); tail != "" {
+		if n, err := strconv.Atoi(tail); err == nil && n > 0 {
+			body = []byte(tailLines(string(body), n))
+		}
+	}
+	c.Data(http.StatusOK, "text/plain; charset=utf-8", body)
+}
+
+// tailLines returns the last n lines of s. Empty result when s is empty.
+// For huge logs we'd want to read from the end of the file; voip_patrol
+// logs are bounded (few MB at most for a 60s run), so a whole-string
+// pass is fine.
+func tailLines(s string, n int) string {
+	if s == "" || n <= 0 {
+		return ""
+	}
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	if len(lines) <= n {
+		return s
+	}
+	return strings.Join(lines[len(lines)-n:], "\n") + "\n"
 }
 
 // handleRunWAV serves recorded WAVs out of the run's dir. Path is
