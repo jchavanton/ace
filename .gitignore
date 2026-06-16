@@ -1,0 +1,10 @@
+# Build output
+/ace
+*.test
+
+# Per-run output (results.json + captured WAVs)
+/runs/*
+!/runs/.keep
+
+# Local-only overrides
+/config.local.yml

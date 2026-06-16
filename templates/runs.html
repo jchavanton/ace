@@ -1,0 +1,42 @@
+{{ define "content_runs" }}
+<h1 class="h3 mb-4">Runs</h1>
+
+{{ if .Runs }}
+<div class="table-responsive">
+<table class="table table-sm align-middle">
+  <thead><tr>
+    <th>Run</th><th>Scenario</th><th>Status</th>
+    <th class="text-end">Pass / Total</th>
+    <th class="text-end">p50 200ms</th>
+    <th class="text-end">MOS Rx</th>
+    <th>Started</th>
+  </tr></thead>
+  <tbody>
+  {{ range .Runs }}
+    <tr>
+      <td><a href="/runs/{{ .ID }}" class="font-monospace small">{{ .ID }}</a></td>
+      <td><a href="/scenarios/{{ .Scenario }}">{{ .Scenario }}</a></td>
+      <td>
+        {{ if eq .Status "done" }}<span class="badge bg-success">done</span>
+        {{ else if eq .Status "running" }}<span class="badge bg-warning text-dark">running</span>
+        {{ else if eq .Status "error" }}<span class="badge bg-danger">error</span>
+        {{ else }}<span class="badge bg-secondary">{{ .Status }}</span>{{ end }}
+      </td>
+      <td class="text-end">
+        {{ if .Aggregate.Total }}
+          {{ if eq .Aggregate.Pass .Aggregate.Total }}<span class="text-success">{{ .Aggregate.Pass }} / {{ .Aggregate.Total }}</span>
+          {{ else }}<span class="text-danger">{{ .Aggregate.Pass }} / {{ .Aggregate.Total }}</span>{{ end }}
+        {{ end }}
+      </td>
+      <td class="text-end small text-muted">{{ if .Aggregate.Invite200P50 }}{{ .Aggregate.Invite200P50 }} ms{{ end }}</td>
+      <td class="text-end small text-muted">{{ if .Aggregate.MOSAvgRx }}{{ printf "%.2f" .Aggregate.MOSAvgRx }}{{ end }}</td>
+      <td class="small text-muted">{{ .StartedAt.Format "2006-01-02 15:04:05" }}</td>
+    </tr>
+  {{ end }}
+  </tbody>
+</table>
+</div>
+{{ else }}
+<p class="text-muted">No runs yet.</p>
+{{ end }}
+{{ end }}

@@ -1,0 +1,39 @@
+{{ define "content_scenarios" }}
+<h1 class="h3 mb-4">Scenarios</h1>
+<p class="text-muted small">Scenario XML files live in <code>{{ .ScenariosDir }}</code>. Drop a file there and refresh.</p>
+
+{{ if .Scenarios }}
+<div class="table-responsive">
+<table class="table table-sm align-middle">
+  <thead><tr><th>Name</th><th class="text-end">Size</th><th>Modified</th><th></th></tr></thead>
+  <tbody>
+  {{ range .Scenarios }}
+    <tr>
+      <td><a href="/scenarios/{{ .Name }}">{{ .Name }}</a></td>
+      <td class="text-end small text-muted">{{ .SizeBytes }} B</td>
+      <td class="small text-muted">{{ .ModTime.Format "2006-01-02 15:04:05" }}</td>
+      <td class="text-end">
+        <form method="post" action="/scenarios/{{ .Name }}/run" class="d-inline">
+          <button type="submit" class="btn btn-sm btn-primary" {{ if $.Busy }}disabled{{ end }}>Run</button>
+        </form>
+      </td>
+    </tr>
+  {{ end }}
+  </tbody>
+</table>
+</div>
+{{ else }}
+<p class="text-muted">No scenarios yet — drop a <code>.xml</code> file into the scenarios dir.</p>
+{{ end }}
+
+{{ if .RecentRuns }}
+<h2 class="h5 mt-5">Recent runs</h2>
+<ul class="list-unstyled small">
+{{ range .RecentRuns }}
+  <li><a href="/runs/{{ .ID }}">{{ .ID }}</a>
+    — {{ if .Aggregate.Total }}{{ .Aggregate.Pass }}/{{ .Aggregate.Total }} pass{{ else }}{{ .Status }}{{ end }}
+  </li>
+{{ end }}
+</ul>
+{{ end }}
+{{ end }}

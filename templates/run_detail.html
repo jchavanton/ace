@@ -1,0 +1,93 @@
+{{ define "content_run_detail" }}
+{{ with .Run }}
+<nav aria-label="breadcrumb"><ol class="breadcrumb small">
+  <li class="breadcrumb-item"><a href="/runs">Runs</a></li>
+  <li class="breadcrumb-item active">{{ .ID }}</li>
+</ol></nav>
+
+<h1 class="h3">{{ .Scenario }}</h1>
+<p class="small text-muted">
+  <code>{{ .ID }}</code> ·
+  {{ .StartedAt.Format "2006-01-02 15:04:05" }}
+  {{ if not .FinishedAt.IsZero }} → {{ .FinishedAt.Format "15:04:05" }}{{ end }}
+  · exit {{ .ExitCode }}
+  · {{ if eq .Status "done" }}<span class="badge bg-success">done</span>
+    {{ else if eq .Status "error" }}<span class="badge bg-danger">error</span>
+    {{ else }}<span class="badge bg-secondary">{{ .Status }}</span>{{ end }}
+</p>
+
+{{ if .Error }}<div class="alert alert-danger small">{{ .Error }}</div>{{ end }}
+
+{{ if .Aggregate.Total }}
+<div class="row mb-4">
+  <div class="col-md-3"><div class="border rounded p-3">
+    <div class="text-muted small">Calls</div>
+    <div class="h4">{{ .Aggregate.Pass }} / {{ .Aggregate.Total }} pass</div>
+    {{ if .Aggregate.Fail }}<div class="text-danger small">{{ .Aggregate.Fail }} failed</div>{{ end }}
+  </div></div>
+  <div class="col-md-3"><div class="border rounded p-3">
+    <div class="text-muted small">Invite → 200</div>
+    <div class="h4">{{ .Aggregate.Invite200P50 }} ms <small class="text-muted">p50</small></div>
+    <div class="small text-muted">{{ .Aggregate.Invite200P95 }} ms p95</div>
+  </div></div>
+  <div class="col-md-3"><div class="border rounded p-3">
+    <div class="text-muted small">RTP MOS (avg)</div>
+    <div class="h4">{{ printf "%.2f" .Aggregate.MOSAvgRx }} <small class="text-muted">Rx</small></div>
+    <div class="small text-muted">{{ printf "%.2f" .Aggregate.MOSAvgTx }} Tx</div>
+  </div></div>
+  <div class="col-md-3"><div class="border rounded p-3">
+    <div class="text-muted small">RTT avg</div>
+    <div class="h4">{{ .Aggregate.RTTAvgMs }} ms</div>
+    <div class="small text-muted">{{ .Aggregate.PacketsLossTx }} Tx pkts lost</div>
+  </div></div>
+</div>
+{{ end }}
+
+{{ if .Calls }}
+<h2 class="h5">Calls</h2>
+<div class="table-responsive">
+<table class="table table-sm align-middle">
+  <thead><tr>
+    <th>#</th><th>Result</th><th>Cause</th><th>Reason</th><th class="text-end">Dur</th>
+    <th class="text-end">100ms</th><th class="text-end">200ms</th>
+    <th class="text-end">MOS Rx/Tx</th><th>Call-ID</th>
+  </tr></thead>
+  <tbody>
+  {{ range $i, $c := .Calls }}
+    <tr>
+      <td>{{ $i }}</td>
+      <td>
+        {{ if eq $c.Result "PASS" }}<span class="badge bg-success">PASS</span>
+        {{ else }}<span class="badge bg-danger">FAIL</span>{{ end }}
+      </td>
+      <td>{{ $c.CauseCode }}</td>
+      <td class="small">{{ $c.Reason }}</td>
+      <td class="text-end small">{{ $c.Duration }}s</td>
+      <td class="text-end small text-muted">{{ $c.SIPLatency.Invite100Ms }}</td>
+      <td class="text-end small text-muted">{{ $c.SIPLatency.Invite200Ms }}</td>
+      <td class="text-end small text-muted">
+        {{ range $c.RTPStats }}{{ printf "%.2f / %.2f" .Rx.MosLQ .Tx.MosLQ }}{{ end }}
+      </td>
+      <td class="font-monospace small text-muted">{{ $c.CallID }}</td>
+    </tr>
+  {{ end }}
+  </tbody>
+</table>
+</div>
+{{ end }}
+{{ end }}
+
+{{ if .WAVs }}
+<h2 class="h5 mt-4">Recordings</h2>
+<ul class="list-unstyled small">
+{{ range .WAVs }}
+  <li>
+    <a href="/runs/{{ $.Run.ID }}/wav/{{ . }}" download>{{ . }}</a>
+    <audio controls preload="none" class="ms-2 align-middle" style="height:24px;">
+      <source src="/runs/{{ $.Run.ID }}/wav/{{ . }}">
+    </audio>
+  </li>
+{{ end }}
+</ul>
+{{ end }}
+{{ end }}

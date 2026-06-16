@@ -1,0 +1,21 @@
+{{ define "content_scenario_detail" }}
+<nav aria-label="breadcrumb"><ol class="breadcrumb small">
+  <li class="breadcrumb-item"><a href="/scenarios">Scenarios</a></li>
+  <li class="breadcrumb-item active">{{ .Scenario.Name }}</li>
+</ol></nav>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">{{ .Scenario.Name }}</h1>
+  <form method="post" action="/scenarios/{{ .Scenario.Name }}/run">
+    <button type="submit" class="btn btn-primary" {{ if .Busy }}disabled{{ end }}>Run scenario</button>
+  </form>
+</div>
+
+<p class="small text-muted">
+  <code>{{ .Scenario.Path }}</code>
+  · {{ .Scenario.SizeBytes }} B
+  · modified {{ .Scenario.ModTime.Format "2006-01-02 15:04:05" }}
+</p>
+
+<pre class="bg-light p-3 small border" style="max-height:70vh; overflow:auto;"><code>{{ .XML }}</code></pre>
+{{ end }}
