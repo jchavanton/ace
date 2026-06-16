@@ -3,8 +3,12 @@ package handlers
 
 import (
 	"context"
+	"encoding/xml"
+	"io"
 	"net/http"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -24,7 +28,9 @@ type Server struct {
 func (s *Server) Register(r *gin.Engine) {
 	r.GET("/", s.handleIndex)
 	r.GET("/scenarios", s.handleScenarios)
+	r.POST("/scenarios", s.handleScenarioCreate)
 	r.GET("/scenarios/:name", s.handleScenarioDetail)
+	r.POST("/scenarios/:name", s.handleScenarioSave)
 	r.POST("/scenarios/:name/run", s.handleRun)
 	r.GET("/runs", s.handleRuns)
 	r.GET("/runs/:id", s.handleRunDetail)
@@ -144,3 +150,125 @@ func (s *Server) handleRunWAV(c *gin.Context) {
 	}
 	c.File(filepath.Join(run.Dir(s.Cfg.RunsDir), file))
 }
+
+// handleScenarioSave overwrites an existing scenario's XML on disk.
+// Validates the submitted body parses as XML before writing; rejects
+// otherwise so we don't replace a working scenario with garbage.
+func (s *Server) handleScenarioSave(c *gin.Context) {
+	name := sanitizeScenarioName(c.Param("name"))
+	if name == "" {
+		c.String(http.StatusBadRequest, "invalid name")
+		return
+	}
+	xml := c.PostForm("xml")
+	if strings.TrimSpace(xml) == "" {
+		c.String(http.StatusBadRequest, "empty XML")
+		return
+	}
+	if err := validateXML(xml); err != nil {
+		c.String(http.StatusBadRequest, "XML parse error: %v", err)
+		return
+	}
+	// Only allow saving over existing scenarios via this route. Creation
+	// goes through POST /scenarios.
+	path := filepath.Join(s.Cfg.ScenariosDir, name+".xml")
+	if _, err := os.Stat(path); err != nil {
+		c.String(http.StatusNotFound, "scenario %q does not exist; create it first", name)
+		return
+	}
+	if err := os.WriteFile(path, []byte(xml), 0o644); err != nil {
+		c.String(http.StatusInternalServerError, "write: %v", err)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/scenarios/"+name)
+}
+
+// handleScenarioCreate creates a new scenario file. Requires a name
+// (used as the .xml basename) and the XML body. Refuses to overwrite
+// an existing file — use the save route for that.
+func (s *Server) handleScenarioCreate(c *gin.Context) {
+	name := sanitizeScenarioName(c.PostForm("name"))
+	if name == "" {
+		c.String(http.StatusBadRequest, "name required (letters, digits, _ and - only)")
+		return
+	}
+	xml := c.PostForm("xml")
+	if strings.TrimSpace(xml) == "" {
+		// Provide a useful starter so the editor isn't empty.
+		xml = scenarioTemplate
+	}
+	if err := validateXML(xml); err != nil {
+		c.String(http.StatusBadRequest, "XML parse error: %v", err)
+		return
+	}
+	path := filepath.Join(s.Cfg.ScenariosDir, name+".xml")
+	if _, err := os.Stat(path); err == nil {
+		c.String(http.StatusConflict, "scenario %q already exists", name)
+		return
+	}
+	if err := os.WriteFile(path, []byte(xml), 0o644); err != nil {
+		c.String(http.StatusInternalServerError, "write: %v", err)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/scenarios/"+name)
+}
+
+// sanitizeScenarioName accepts letters, digits, '_', and '-' only. Any
+// other character (slashes, dots, spaces, ...) → empty result → 400 at
+// the handler. This is the only path validation between the URL/form
+// param and the filesystem, so it must be strict.
+func sanitizeScenarioName(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" || len(s) > 64 {
+		return ""
+	}
+	for _, r := range s {
+		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '_' || r == '-'
+		if !ok {
+			return ""
+		}
+	}
+	return s
+}
+
+// validateXML checks the body parses as a well-formed XML document.
+// We don't enforce a voip_patrol schema beyond "parses" — that's what
+// running the scenario will surface.
+func validateXML(body string) error {
+	dec := xml.NewDecoder(strings.NewReader(body))
+	for {
+		_, err := dec.Token()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
+// scenarioTemplate is what we drop into the editor when an operator
+// creates a new scenario with no body. Minimal voip_patrol skeleton
+// matching the shape of the existing aizan_test_option4 scenario.
+const scenarioTemplate = `<config>
+  <actions>
+    <action type="codec" disable="all"/>
+    <action type="codec" enable="pcmu" priority="250"/>
+    <action type="codec" enable="pcma" priority="249"/>
+
+    <action type="call" label="my-scenario"
+            transport="udp"
+            account="5145550199"
+            expected_cause_code="200"
+            caller="+15145550199@sbc.example.com"
+            callee="+16477988128@sbc.example.com"
+            max_duration="60" hangup="55"
+            rtp_stats="true"
+            record="true"
+            play_dtmf="WW1#"/>
+
+    <action type="wait" complete="true"/>
+  </actions>
+</config>
+`

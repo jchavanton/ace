@@ -95,7 +95,7 @@ func (r *Runner) Run(ctx context.Context, scenario *models.Scenario) (*models.Ru
 	// Parse results.json regardless of exit code — voip_patrol writes
 	// per-call results as they complete, so a crash mid-run still
 	// leaves partial data we want to surface.
-	calls, parseErr := loadVoipPatrolResults(filepath.Join(run.Dir(r.Cfg.RunsDir), "results.json"), scenario.Name)
+	calls, parseErr := loadVoipPatrolResults(filepath.Join(run.Dir(r.Cfg.RunsDir), "results.json"))
 	run.Calls = calls
 	run.Aggregate = aggregate(calls)
 	if run.Status != "error" {
@@ -115,12 +115,13 @@ func (r *Runner) Run(ctx context.Context, scenario *models.Scenario) (*models.Ru
 }
 
 // loadVoipPatrolResults reads voip_patrol's results.json. The file is
-// **one JSON object per line** (not a JSON array — see the README), so
-// we decode line-by-line. We filter to the calls matching this run's
-// scenario label, since voip_patrol appends to the file across runs
-// when its cwd doesn't change. Cwd is per-run here so the filter is
-// belt-and-suspenders.
-func loadVoipPatrolResults(path, label string) ([]models.CallResult, error) {
+// **one JSON object per line** (not a JSON array — see the README),
+// so we decode line-by-line. Since we set cwd to the per-run dir when
+// spawning voip_patrol, each run gets a fresh file holding only its
+// own calls — no need to filter by label (and label-filtering bit us
+// before: the XML's label= attribute is operator-chosen and doesn't
+// have to match the scenario filename).
+func loadVoipPatrolResults(path string) ([]models.CallResult, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -139,9 +140,6 @@ func loadVoipPatrolResults(path, label string) ([]models.CallResult, error) {
 			// the file is append-only and a torn write at the tail
 			// is recoverable.
 			break
-		}
-		if label != "" && c.Label != label {
-			continue
 		}
 		out = append(out, c)
 	}

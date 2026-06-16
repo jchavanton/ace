@@ -1,6 +1,22 @@
 {{ define "content_scenarios" }}
-<h1 class="h3 mb-4">Scenarios</h1>
-<p class="text-muted small">Scenario XML files live in <code>{{ .ScenariosDir }}</code>. Drop a file there and refresh.</p>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Scenarios</h1>
+  <button type="button" class="btn btn-outline-primary btn-sm" onclick="document.getElementById('new-scenario').classList.toggle('d-none')">+ New scenario</button>
+</div>
+<p class="text-muted small">Scenario XML files live in <code>{{ .ScenariosDir }}</code>. Drop a file there or use the editor.</p>
+
+<div id="new-scenario" class="d-none border rounded p-3 mb-4 bg-light">
+  <form method="post" action="/scenarios">
+    <div class="mb-2">
+      <label class="form-label small mb-1">Name <span class="text-muted">(letters, digits, _ or -)</span></label>
+      <input type="text" name="name" class="form-control form-control-sm" required pattern="[A-Za-z0-9_\-]+" maxlength="64" placeholder="my_scenario">
+    </div>
+    <p class="small text-muted mb-2">Leave the body blank to start from a minimal voip_patrol template.</p>
+    <textarea name="xml" class="form-control font-monospace small mb-2" rows="6" placeholder="(optional) starter XML"></textarea>
+    <button type="submit" class="btn btn-sm btn-primary">Create</button>
+    <button type="button" class="btn btn-sm btn-link" onclick="document.getElementById('new-scenario').classList.add('d-none')">Cancel</button>
+  </form>
+</div>
 
 {{ if .Scenarios }}
 <div class="table-responsive">
