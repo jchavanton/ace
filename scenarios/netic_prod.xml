@@ -1,0 +1,29 @@
+<config>
+  <actions>
+        <action type="codec" disable="all"/>
+        <action type="codec" enable="pcmu" priority="248"/>
+
+    <!-- note: proxy param to send to a proxy -->
+    <action type="call" label="us-east-va"
+            transport="tls"
+	    account="4165551212"
+            caller="4165551212@34.72.117.34:5060"
+            callee="+12015345578@sip2.netic.ai:5061"
+            to_uri="+12015345578@sip2.netic.ai:5061"
+            max_duration="20" hangup="20"
+            username="4165551212"
+            password="newt1123"
+            rtp_stats="true"
+    >
+        <x-header name="X-User-To-User" value="X-Netic-ID:2fa41e02-04be-4b4a-98fc-c2a7dced961c X-Genesys-ID:310dc887-8d10-4c17-b549-9081d0aa6671 X-Branch-ID:9062 X-Called-Number:+16297773779 X-VDN-Vector:+16297773779 X-Customer-Phone:4169410783"/>
+    </action>
+        <action type="wait"/> <!-- this will wait until the call is confirmed -->
+        <action type="codec" disable="pcmu"/>
+        <!-- re-invite will now use pcmu forcing a new session -->
+        <action type="wait" ms="30000"/> <!-- this will wait 3 seconds -->
+        <action type="codec" enable="pcma" priority="250"/>
+        <!-- re-invite will now use pcma forcing a new session -->
+
+    <action type="wait" complete="true"/>
+  </actions>
+</config>

@@ -1,0 +1,22 @@
+<config>
+  <actions>
+    <action type="codec" disable="all"/>
+    <action type="codec" enable="pcmu" priority="248"/>
+    <action type="codec" enable="pcma" priority="247"/>
+
+    <!-- RingCentral SIP Registration -->
+    <action type="register"
+            label="ringcentral-registration"
+            transport="udp"
+            account="12096903617"
+            username="647035052"
+            password="fSSOIc"
+            registrar="sip.ringcentral.com:5060"
+            proxy="sip22.ringcentral.com:5090"
+            expected_cause_code="200"
+            max_duration="60"
+    />
+
+    <action type="wait" complete="true"/>
+  </actions>
+</config>

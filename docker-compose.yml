@@ -1,0 +1,41 @@
+# ace + voip_patrol in one container, host networking.
+#
+# Host networking means voip_patrol's SIP/RTP sockets are visible on
+# the host's interface directly — no port translation, no docker NAT
+# fighting with carrier NAT. ace listens on whatever ACE_ADDR sets,
+# typically :8086.
+#
+# scenarios/ and runs/ are bind-mounted so an operator can drop XML
+# files into ./scenarios/ on the host and see them appear in the UI,
+# and inspect captured WAVs under ./runs/ without entering the container.
+#
+# Build:   docker compose build
+# Run:     docker compose up -d
+# Tail:    docker compose logs -f
+# Stop:    docker compose down
+
+services:
+  ace:
+    image: ace:0.1.0
+    container_name: ace
+    build:
+      context: .
+      additional_contexts:
+        # Bring the voip_patrol source tree in as a build context (read-only).
+        # The Dockerfile's stage 1 does `COPY voip_patrol /git/voip_patrol`,
+        # which resolves to this dir at build time.
+        voip_patrol: ../voip_patrol
+      dockerfile: Dockerfile
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      ACE_ADDR: "0.0.0.0:8086"
+      ACE_VOIP_PATROL_PORT: "5093"
+      # Set this to your public IP if behind NAT. Empty = let PJSIP use
+      # whatever interface it bound to. With network_mode: host the
+      # binding is on the host's real IP, so on a host with a public IP
+      # this can stay empty.
+      ACE_PUBLIC_ADDRESS: ""
+    volumes:
+      - ./scenarios:/data/scenarios:rw
+      - ./runs:/data/runs:rw

@@ -1,0 +1,21 @@
+<config>
+  <actions>
+    <action type="codec" disable="all"/>
+    <action type="codec" enable="pcmu" priority="250"/>
+    <action type="codec" enable="pcma" priority="249"/>
+
+    <action type="call" label="aizan-option4"
+            transport="udp"
+            account="5145550199"
+            expected_cause_code="200"
+            caller="+15145550199@38.111.117.201"
+            callee="+16477988128@38.111.117.201"
+            max_duration="60" hangup="55"
+            rtp_stats="true"
+            record="true"
+            play_dtmf="WW4WW12345678#"
+            repeat="49"/>
+
+    <action type="wait" complete="true"/>
+  </actions>
+</config>

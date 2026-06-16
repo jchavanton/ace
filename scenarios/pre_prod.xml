@@ -1,0 +1,19 @@
+<config>
+  <actions>
+    <!-- note: proxy param to send to a proxy -->
+    <action type="call" label="us-east-va"
+            transport="tcp"
+	    account="6778777777"
+            caller="16778777777@38.111.117.201:5060"
+            callee="+16477988128@38.111.117.201:5060"
+            to_uri="+16477988128@38.111.117.201:5060"
+            max_duration="120" hangup="120"
+            username="6778777777"
+            password="secret123"
+            rtp_stats="true"
+    >
+        <x-header name="X-Foo" value="Bar"/>
+    </action>
+    <action type="wait" complete="true"/>
+  </actions>
+</config>

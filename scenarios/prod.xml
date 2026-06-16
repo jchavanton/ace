@@ -1,0 +1,29 @@
+<config>
+  <actions>
+        <action type="codec" disable="all"/>
+        <action type="codec" enable="pcmu" priority="248"/>
+
+    <!-- note: proxy param to send to a proxy -->
+    <action type="call" label="us-east-va"
+            transport="tcp"
+	    account="4165551212"
+            caller="4165551212@38.111.117.202:5062"
+            callee="16477908213@38.111.117.202:5062"
+            to_uri="+16477908213@38.111.117.202:5062"
+            max_duration="20" hangup="90"
+            username="4165551212"
+            password="newt1123"
+            rtp_stats="true"
+    >
+        <x-header name="X-Foo" value="Bar"/>
+    </action>
+        <action type="wait"/> <!-- this will wait until the call is confirmed -->
+        <action type="codec" disable="pcmu"/>
+        <!-- re-invite will now use pcmu forcing a new session -->
+        <action type="wait" ms="3000"/> <!-- this will wait 3 seconds -->
+        <action type="codec" enable="pcma" priority="250"/>
+        <!-- re-invite will now use pcma forcing a new session -->
+
+    <action type="wait" complete="true"/>
+  </actions>
+</config>

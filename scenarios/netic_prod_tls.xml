@@ -1,0 +1,43 @@
+<config>
+  <actions>
+        <action type="codec" disable="all"/>
+        <action type="codec" enable="pcmu" priority="248"/>
+
+    <!-- note: proxy param to send to a proxy -->
+    <action type="call" label="us-east-va"
+            transport="tls"
+	    account="4165551212"
+            caller="4165551212@sip1.netic.ai:5061"
+            callee="14803729244@sip1.netic.ai:5061"
+            to_uri="+14803729244@sip1.netic.ai:5061"
+            max_duration="20" hangup="90"
+            username="4165551212"
+            password="newt1123"
+            rtp_stats="true"
+    >
+        <x-header name="x-User-To-User" value="X-Genesys-ID:310dc887-8d10-4c17-b549-9081d0aa6671 X-Branch-ID:8253 X-Called-Number:+16297773779 X-VDN-Vector:+16297773779 X-Customer-Phone:4169410783 X-CallWizard-URL:https://fsa.ars.com/FSA/Office/Call/"/>
+    </action>
+    <!-- note: proxy param to send to a proxy -->
+    <action type="call" label="us-east-va"
+            transport="tls"
+	    account="4165551212"
+            caller="4165551212@sip2.netic.ai:5061"
+            callee="16477908213@sip2.netic.ai:5061"
+            to_uri="+16477908213@sip2.netic.ai:5061"
+            max_duration="20" hangup="90"
+            username="4165551212"
+            password="newt1123"
+            rtp_stats="true"
+    >
+        <x-header name="X-Branch-ID" value="9055"/>
+    </action>
+        <action type="wait"/> <!-- this will wait until the call is confirmed -->
+        <action type="codec" disable="pcmu"/>
+        <!-- re-invite will now use pcmu forcing a new session -->
+        <action type="wait" ms="3000"/> <!-- this will wait 3 seconds -->
+        <action type="codec" enable="pcma" priority="250"/>
+        <!-- re-invite will now use pcma forcing a new session -->
+
+    <action type="wait" complete="true"/>
+  </actions>
+</config>

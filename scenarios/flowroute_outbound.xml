@@ -1,0 +1,29 @@
+<config>
+  <actions>
+	          <action type="codec" disable="all"/>
+        <action type="codec" enable="pcma" priority="250"/>
+        <action type="codec" enable="pcmu" priority="248"/>
+    <action type="call" label="us-east-va"
+            transport="udp"
+	    account="2012772903"
+            caller="+12012772903@us-east-va.sip.flowroute.com"
+            callee="+15144496444@us-east-va.sip.flowroute.com"
+            to_uri="+15144496444@us-east-va.sip.flowroute.com"
+            username="33663170"
+            password="M4C6JA9gzpzz"
+	    max_ringing_duration="60"
+            max_duration="20" hangup="20"
+            rtp_stats="true"
+	    detect_tone="true"
+	    hangup_on_tone="false"
+    >
+        <x-header name="X-Foo" value="Bar"/>
+    </action>
+        <action type="codec" disable="pcmu"/>
+        <!-- re-invite will now use pcmu forcing a new session -->
+        <action type="codec" enable="pcma" priority="250"/>
+        <!-- re-invite will now use pcma forcing a new session -->
+
+    <action type="wait" complete="true"/>
+  </actions>
+</config>

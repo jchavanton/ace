@@ -11,7 +11,10 @@
 <body>
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
   <div class="container">
-    <a class="navbar-brand" href="/">ace</a>
+    <a class="navbar-brand d-flex align-items-center" href="/">
+      <img src="/static/logo.png" alt="ace" height="28" class="me-2" style="filter:invert(1);">
+      ace
+    </a>
     <ul class="navbar-nav me-auto">
       <li class="nav-item"><a class="nav-link {{ if eq .Page "scenarios" }}active{{ end }}" href="/scenarios">Scenarios</a></li>
       <li class="nav-item"><a class="nav-link {{ if eq .Page "runs" }}active{{ end }}" href="/runs">Runs</a></li>

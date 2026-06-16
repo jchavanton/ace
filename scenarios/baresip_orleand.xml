@@ -1,0 +1,29 @@
+<config>
+  <actions>
+        <action type="codec" disable="all"/>
+        <action type="codec" enable="pcmu" priority="248"/>
+
+    <!-- note: proxy param to send to a proxy -->
+    <action type="call" label="us-east-va"
+            transport="udp"
+	    account="4165551212"
+            caller="8334496444@192.168.0.119:5070"
+            callee="julien@192.168.0.119:5080"
+            to_uri="julien@192.168.0.119:5080"
+	    max_ringing_duration="60"
+            max_duration="20" hangup="20"
+            username="4165551212"
+            password="newt1123"
+            rtp_stats="true"
+	    record="true"
+    >
+        <x-header name="X-Foo" value="Bar"/>
+    </action>
+        <action type="codec" disable="pcmu"/>
+        <!-- re-invite will now use pcmu forcing a new session -->
+        <action type="codec" enable="pcma" priority="250"/>
+        <!-- re-invite will now use pcma forcing a new session -->
+
+    <action type="wait" complete="true"/>
+  </actions>
+</config>
