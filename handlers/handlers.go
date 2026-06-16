@@ -2,14 +2,12 @@
 package handlers
 
 import (
-	"context"
 	"encoding/xml"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -91,17 +89,13 @@ func (s *Server) handleRun(c *gin.Context) {
 		c.String(http.StatusNotFound, "scenario %q: %v", name, err)
 		return
 	}
-	if s.Runner.IsBusy() {
-		c.String(http.StatusConflict, "another run is in progress; one at a time")
-		return
-	}
-	// Time-bound the run so a stuck voip_patrol doesn't block the
-	// controller forever. 10 min is well above any reasonable scenario.
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Minute)
-	defer cancel()
-	run, err := s.Runner.Run(ctx, scn)
-	if err != nil && run == nil {
-		c.String(http.StatusInternalServerError, "run failed: %v", err)
+	// Start launches voip_patrol in a background goroutine and returns
+	// immediately with the run record (status=running). We redirect to
+	// the run detail page; the goroutine outlives this HTTP request, so
+	// navigating away or closing the tab doesn't kill voip_patrol.
+	run, err := s.Runner.Start(scn)
+	if err != nil {
+		c.String(http.StatusConflict, "run failed to start: %v", err)
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/runs/"+run.ID)

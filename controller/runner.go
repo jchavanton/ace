@@ -40,18 +40,49 @@ func (r *Runner) IsBusy() bool {
 	return true
 }
 
-// Run executes the named scenario, blocking until voip_patrol exits.
-// Returns the persisted Run record (which holds parsed call results and
-// any error). Caller-side timeouts can use ctx; voip_patrol itself has
-// no built-in timeout, so a stuck run would otherwise block forever.
-func (r *Runner) Run(ctx context.Context, scenario *models.Scenario) (*models.Run, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+// Start kicks off a scenario run and returns the freshly-created Run
+// record (status=running). The actual voip_patrol execution proceeds in
+// a background goroutine using a context that's independent of the
+// HTTP request — so navigating away from the page or closing the tab
+// doesn't kill the run. The mutex is held across the whole goroutine.
+//
+// On error before exec (mutex busy, scenario dir missing, etc.) Start
+// returns an error and no Run; the goroutine itself never returns an
+// error — failures land in run.Status / run.Error inside run.json.
+func (r *Runner) Start(scenario *models.Scenario) (*models.Run, error) {
+	if !r.mu.TryLock() {
+		return nil, fmt.Errorf("another run is in progress")
+	}
 
 	run, err := models.NewRun(r.Cfg.RunsDir, scenario.Name)
 	if err != nil {
+		r.mu.Unlock()
 		return nil, fmt.Errorf("new run: %w", err)
 	}
+	// Persist the running-state record so the UI can show it
+	// immediately after the redirect.
+	if err := run.Save(r.Cfg.RunsDir); err != nil {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("save run: %w", err)
+	}
+
+	go func() {
+		defer r.mu.Unlock()
+		r.execute(run, scenario)
+	}()
+	return run, nil
+}
+
+// execute is the blocking half: spawns voip_patrol, waits for exit,
+// parses results, saves the final run.json. Runs on a background
+// goroutine — the http handler that invoked Start has long since
+// returned by the time this finishes.
+//
+// 10-minute upper bound on the spawn so a stuck voip_patrol doesn't
+// pin the runner mutex forever; well above any reasonable scenario.
+func (r *Runner) execute(run *models.Run, scenario *models.Scenario) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
 
 	args := []string{
 		"--port", fmt.Sprintf("%d", r.Cfg.VoipPatrolPort),
@@ -72,8 +103,9 @@ func (r *Runner) Run(ctx context.Context, scenario *models.Scenario) (*models.Ru
 	if err != nil {
 		run.Status = "error"
 		run.Error = fmt.Sprintf("create log: %v", err)
+		run.FinishedAt = time.Now().UTC()
 		_ = run.Save(r.Cfg.RunsDir)
-		return run, err
+		return
 	}
 	defer logFile.Close()
 	cmd.Stdout = logFile
@@ -84,7 +116,7 @@ func (r *Runner) Run(ctx context.Context, scenario *models.Scenario) (*models.Ru
 	if cmd.ProcessState != nil {
 		run.ExitCode = cmd.ProcessState.ExitCode()
 	}
-	// Exec-level failures (binary not found, ctx canceled, signal-killed
+	// Exec-level failures (binary not found, ctx-canceled, signal-killed
 	// before producing output) win over downstream parse errors — they're
 	// the actual root cause.
 	if runErr != nil {
@@ -108,10 +140,7 @@ func (r *Runner) Run(ctx context.Context, scenario *models.Scenario) (*models.Ru
 		}
 	}
 
-	if err := run.Save(r.Cfg.RunsDir); err != nil {
-		return run, fmt.Errorf("save run: %w", err)
-	}
-	return run, nil
+	_ = run.Save(r.Cfg.RunsDir)
 }
 
 // loadVoipPatrolResults reads voip_patrol's results.json. The file is

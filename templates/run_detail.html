@@ -1,5 +1,6 @@
 {{ define "content_run_detail" }}
 {{ with .Run }}
+{{ if eq .Status "running" }}<meta http-equiv="refresh" content="3">{{ end }}
 <nav aria-label="breadcrumb"><ol class="breadcrumb small">
   <li class="breadcrumb-item"><a href="/runs">Runs</a></li>
   <li class="breadcrumb-item active">{{ .ID }}</li>
