@@ -1,0 +1,5 @@
+# Ace's own build / runtime junk that shouldn't ride into the image.
+/ace
+/runs
+/runs/*
+*.test

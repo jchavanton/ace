@@ -20,7 +20,8 @@ FROM debian:trixie AS voip_patrol_builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential libcurl4-openssl-dev cmake pkg-config \
-        libasound2-dev libopus0 libopus-dev libssl-dev git ca-certificates \
+        libasound2-dev libopus0 libopus-dev libssl-dev libuuid1 uuid-dev \
+        git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy local checkout (includes our null-pointer fix). The build is
@@ -30,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=voip_patrol . /git/voip_patrol
 
 RUN cd /git/voip_patrol \
+    && rm -rf CMakeCache.txt CMakeFiles cmake_install.cmake Makefile \
     && cp include/config_site.h pjproject/pjlib/include/pj/config_site.h \
     && cd pjproject && ./configure --disable-libwebrtc --disable-opencore-amr \
     && make dep && make && make install \
@@ -52,7 +54,7 @@ FROM debian:trixie-slim
 # voip_patrol's pjproject was linked against (libcurl/libssl/libopus/
 # libasound for ALSA stubs even when running headless).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libcurl4 libssl3 libopus0 libasound2t64 ca-certificates \
+        libcurl4 libssl3 libopus0 libasound2t64 libuuid1 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # voip_patrol binary + reference WAVs (needed by some scenarios for the

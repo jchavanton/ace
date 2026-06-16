@@ -84,10 +84,12 @@ func (r *Runner) Run(ctx context.Context, scenario *models.Scenario) (*models.Ru
 	if cmd.ProcessState != nil {
 		run.ExitCode = cmd.ProcessState.ExitCode()
 	}
-	if runErr != nil && run.ExitCode == 0 {
-		// Probably ctx cancellation; surface it.
+	// Exec-level failures (binary not found, ctx canceled, signal-killed
+	// before producing output) win over downstream parse errors — they're
+	// the actual root cause.
+	if runErr != nil {
 		run.Status = "error"
-		run.Error = runErr.Error()
+		run.Error = fmt.Sprintf("voip_patrol: %v", runErr)
 	}
 
 	// Parse results.json regardless of exit code — voip_patrol writes
@@ -98,11 +100,12 @@ func (r *Runner) Run(ctx context.Context, scenario *models.Scenario) (*models.Ru
 	run.Aggregate = aggregate(calls)
 	if run.Status != "error" {
 		run.Status = "done"
-	}
-	if parseErr != nil && len(calls) == 0 {
-		// Only surface parse errors when there's no usable data; a
-		// partial-result parse is normal and shouldn't read as fail.
-		run.Error = fmt.Sprintf("parse results: %v", parseErr)
+		if parseErr != nil && len(calls) == 0 {
+			// Only surface parse errors when nothing else went wrong AND
+			// we have no usable data; partial-result parse is normal.
+			run.Status = "error"
+			run.Error = fmt.Sprintf("parse results: %v", parseErr)
+		}
 	}
 
 	if err := run.Save(r.Cfg.RunsDir); err != nil {
