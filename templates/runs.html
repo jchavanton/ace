@@ -9,6 +9,7 @@
     <th class="text-end">Pass / Total</th>
     <th class="text-end">p50 200ms</th>
     <th class="text-end">MOS Rx</th>
+    <th class="text-end">MOS Tx</th>
     <th>Started</th>
   </tr></thead>
   <tbody>
@@ -30,6 +31,7 @@
       </td>
       <td class="text-end small text-muted">{{ if .Aggregate.Invite200P50 }}{{ .Aggregate.Invite200P50 }} ms{{ end }}</td>
       <td class="text-end small text-muted">{{ if .Aggregate.MOSAvgRx }}{{ printf "%.2f" .Aggregate.MOSAvgRx }}{{ end }}</td>
+      <td class="text-end small text-muted">{{ if .Aggregate.MOSAvgTx }}{{ printf "%.2f" .Aggregate.MOSAvgTx }}{{ end }}</td>
       <td class="small text-muted">{{ .StartedAt.Format "2006-01-02 15:04:05" }}</td>
     </tr>
   {{ end }}
