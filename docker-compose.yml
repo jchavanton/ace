@@ -29,13 +29,15 @@ services:
     network_mode: host
     restart: unless-stopped
     environment:
-      ACE_ADDR: "0.0.0.0:8086"
-      ACE_VOIP_PATROL_PORT: "5093"
-      # Set this to your public IP if behind NAT. Empty = let PJSIP use
-      # whatever interface it bound to. With network_mode: host the
-      # binding is on the host's real IP, so on a host with a public IP
-      # this can stay empty.
-      ACE_PUBLIC_ADDRESS: ""
+      # Values come from .env (rendered by ansible on deploy) or fall
+      # back to these defaults for a hand-launched local stack.
+      ACE_ADDR: "${ACE_ADDR:-0.0.0.0:8086}"
+      ACE_VOIP_PATROL_PORT: "${ACE_VOIP_PATROL_PORT:-5093}"
+      # Set this to the host's public IP when behind NAT. Empty = let
+      # PJSIP use whatever interface it bound to. With network_mode: host
+      # the binding is on the host's real IP, so on a host with a public
+      # IP this can stay empty.
+      ACE_PUBLIC_ADDRESS: "${ACE_PUBLIC_ADDRESS:-}"
     volumes:
       - ./scenarios:/data/scenarios:rw
       - ./runs:/data/runs:rw

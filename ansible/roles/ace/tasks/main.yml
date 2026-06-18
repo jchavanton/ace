@@ -1,0 +1,126 @@
+---
+# ace role: install docker (if missing), ship source, build & run.
+
+- name: Install docker prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - rsync
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+
+# On a private LAN deployment (the only target shape today) we leave
+# ACE_PUBLIC_ADDRESS empty — PJSIP advertises whatever the host's NIC
+# bound to, which is reachable from the rest of the LAN. Set
+# ace_public_address in the inventory if you ever need to override
+# (e.g. a NATed deploy that needs to advertise a specific public IP).
+- name: Resolve ace_public_address (inventory override only)
+  ansible.builtin.set_fact:
+    ace_public_address_effective: "{{ ace_public_address | default('') }}"
+
+# Source code → target. Use rsync (synchronize module) so re-deploys
+# only ship the delta. The build context for ace is the install dir;
+# voip_patrol is a sibling so the Dockerfile's additional_contexts
+# resolves correctly.
+- name: Ensure install dir exists
+  ansible.builtin.file:
+    path: "{{ ace_install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Ship ace source to host
+  ansible.posix.synchronize:
+    src: "{{ ace_source_dir }}/"
+    dest: "{{ ace_install_dir }}/"
+    delete: false              # preserve runs/ and scenarios/ on the host
+    recursive: true
+    rsync_opts:
+      - "--exclude=runs/*"
+      - "--exclude=scenarios/*"   # operator's scenarios stay sovereign
+      - "--exclude=.git"
+      - "--exclude=ace"           # built binary; the image rebuild does its own
+      - "--exclude=ansible"       # don't ship the playbook into the build context
+    times: true
+
+- name: Ship voip_patrol source to host
+  ansible.posix.synchronize:
+    src: "{{ voip_patrol_source_dir }}/"
+    dest: "{{ ace_install_dir }}/../voip_patrol/"
+    delete: true                # keep this checkout pristine
+    recursive: true
+    # Anchor excludes to the root with a leading slash. Bare names match
+    # at any depth — `Makefile` alone would also exclude
+    # pjproject/Makefile which is TRACKED source we need for the build.
+    rsync_opts:
+      - "--exclude=/.git"
+      - "--exclude=/CMakeCache.txt"
+      - "--exclude=/CMakeFiles"
+      - "--exclude=/Makefile"              # CMake-generated; NOT pjproject/Makefile
+      - "--exclude=/cmake_install.cmake"
+      - "--exclude=/voip_patrol"           # built binary
+      - "--exclude=pjproject/build.mak"    # configure-generated
+      - "--exclude=pjproject/**/output"    # build outputs per module
+    times: true
+
+# Per-host overrides for the compose stack. The .env file is the only
+# place a deployer should need to set values; the compose file itself
+# reads them with ${VAR:-default} so changes don't require editing it.
+- name: Render compose .env
+  ansible.builtin.template:
+    src: ace.env.j2
+    dest: "{{ ace_install_dir }}/.env"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart ace
+
+# Host data dirs. scenarios/ stays operator-managed (we don't
+# overwrite). runs/ accumulates run history; owned by root since the
+# container writes as root.
+- name: Ensure scenarios dir exists
+  ansible.builtin.file:
+    path: "{{ ace_install_dir }}/scenarios"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Ensure runs dir exists
+  ansible.builtin.file:
+    path: "{{ ace_install_dir }}/runs"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+# `docker compose up -d --build` is the single source of truth. The
+# --build flag re-runs the image build only when the Dockerfile / source
+# changed; otherwise it's a fast no-op. changed_when keys off compose's
+# output so ansible's reporting reflects what actually happened.
+- name: docker compose up
+  ansible.builtin.command:
+    cmd: docker compose up -d --build
+    chdir: "{{ ace_install_dir }}"
+  register: compose_up
+  changed_when: >
+    'Started' in compose_up.stderr or
+    'Created' in compose_up.stderr or
+    'Recreated' in compose_up.stderr or
+    'Built' in compose_up.stderr
+
+- name: Wait for ace HTTP to come up
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ ace_http_addr | regex_replace('^.*:', '') }}/scenarios"
+    status_code: 200
+  register: ace_health
+  until: ace_health.status == 200
+  retries: 12
+  delay: 5
+
+- name: Show ace URL
+  ansible.builtin.debug:
+    msg: "ace is up — http://{{ inventory_hostname }}:{{ ace_http_addr | regex_replace('^.*:', '') }}/"

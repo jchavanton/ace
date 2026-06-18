@@ -1,0 +1,33 @@
+# Inventory for ace deployments.
+#
+# ace runs on "client" hosts — boxes that originate test calls into the
+# Aizan VXML stack. Separate from the vxml runtime inventory (~/git/aizan/vxml/
+# ansible/inventory*.yml) so the two stacks roll independently.
+#
+# Hostnames come from ~/.ssh/config; no ansible_host needed.
+
+ace_hosts:
+   hosts:
+      sbc-ace-client1:
+         # Public IP advertised in SIP Contact / Via headers. Empty =
+         # let the playbook auto-discover via an external lookup at
+         # deploy time. Override here when the host has a known fixed
+         # public IP (saves the lookup).
+         ace_public_address: ""
+
+   vars:
+      ansible_user: julien
+
+      # Where the playbook builds + ships the image from. Defaults to a
+      # local checkout in the deployer's home. Need sibling voip_patrol
+      # too (used by the Dockerfile's stage-1 build context).
+      ace_source_dir:         "{{ lookup('env','HOME') }}/git/ace"
+      voip_patrol_source_dir: "{{ lookup('env','HOME') }}/git/voip_patrol"
+
+      # Install dir on the target — compose project lives here.
+      ace_install_dir: /opt/aizan/ace
+
+      # Bind addresses for the web UI and SIP. Web UI on 8086 by
+      # default; SIP on 5093 to mirror what we use locally.
+      ace_http_addr: "0.0.0.0:8086"
+      ace_sip_port: 5093

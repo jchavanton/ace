@@ -1,0 +1,5 @@
+---
+- name: restart ace
+  ansible.builtin.command:
+    cmd: docker compose up -d
+    chdir: "{{ ace_install_dir }}"

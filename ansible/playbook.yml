@@ -1,0 +1,17 @@
+---
+# Deploy ace to a fresh (or existing) ace-client host.
+#
+# Idempotent: safe to re-run. The compose-up step rebuilds the image
+# from source on the target host (no toolchain on the deployer needed);
+# subsequent runs only rebuild what changed.
+#
+# Usage:
+#   ansible-playbook -i inventory.yml playbook.yml
+#
+# Per-host overrides go in the inventory (see ace_public_address).
+
+- hosts: ace_hosts
+  become: true
+  serial: 1   # one host at a time so a rollout never recreates all at once
+  roles:
+    - ace
