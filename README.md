@@ -1,5 +1,9 @@
 # ace
 
+<p align="center">
+  <img src="static/logo.png" alt="ace logo" width="200">
+</p>
+
 WWI fighter-ace style. Web admin for driving `voip_patrol` test scenarios:
 list scenarios, run them, capture per-call pass/fail + RTP/SIP stats,
 play back recorded WAVs.
