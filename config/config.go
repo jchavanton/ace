@@ -43,6 +43,15 @@ type Config struct {
 	// timestamped subdir per run; results.json + captured WAVs go there.
 	RunsDir string
 
+	// VoiceRefDir is the source dir for voip_patrol's reference WAV
+	// files. Scenarios reference these by relative path (e.g.
+	// "voice_ref_files/reference_8000.wav"), which voip_patrol
+	// resolves against its cwd. We set cwd to the per-run dir, so the
+	// runner symlinks this dir into each run dir as "voice_ref_files"
+	// before spawning. Empty disables the symlink (scenarios that
+	// don't use ref files still work).
+	VoiceRefDir string
+
 	// BasicAuthHtpasswd, when non-empty, points at an htpasswd file
 	// (bcrypt entries only) enforced by the handler middleware. Empty
 	// disables auth entirely — matches the existing behavior for LAN
@@ -64,6 +73,7 @@ func FromFlags() *Config {
 	flag.StringVar(&c.PublicAddress, "public-address", "", "public-side IP for SIP Contact / Via (passed to voip_patrol --public-address)")
 	flag.StringVar(&c.ScenariosDir, "scenarios-dir", "./scenarios", "directory holding scenario XML files")
 	flag.StringVar(&c.RunsDir, "runs-dir", "./runs", "directory where per-run output lands")
+	flag.StringVar(&c.VoiceRefDir, "voice-ref-dir", "/voice_ref_files", "source dir for voip_patrol reference WAVs; symlinked into each run dir as 'voice_ref_files'. Empty disables.")
 	flag.StringVar(&c.BasicAuthHtpasswd, "basic-auth-htpasswd", "", "path to htpasswd file (bcrypt); empty = no auth")
 	flag.Parse()
 

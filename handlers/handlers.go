@@ -35,6 +35,7 @@ func (s *Server) Register(r *gin.Engine) {
 	r.GET("/scenarios/:name", s.handleScenarioDetail)
 	r.POST("/scenarios/:name", s.handleScenarioSave)
 	r.POST("/scenarios/:name/delete", s.handleScenarioDelete)
+	r.POST("/scenarios/:name/ports", s.handleScenarioPortsSave)
 	r.POST("/scenarios/:name/run", s.handleRun)
 	r.POST("/runs/:id/stop", s.handleRunStop)
 	r.GET("/runs", s.handleRuns)
@@ -64,8 +65,12 @@ func (s *Server) handleScenarios(c *gin.Context) {
 		"ContentTemplate": "content_scenarios",
 		"Scenarios":       scenarios,
 		"RecentRuns":      runs,
-		"Busy":            s.Runner.IsBusy(),
-		"ScenariosDir":    s.Cfg.ScenariosDir,
+		"ActiveRuns":      s.Runner.ActiveRuns(),
+		// DefaultsBusy gates the list-view "Run" button, which submits
+		// without per-run overrides. If the runner's default ports are
+		// occupied, that button would just 409 — disable it up front.
+		"DefaultsBusy": s.Runner.DefaultPortsInUse(),
+		"ScenariosDir": s.Cfg.ScenariosDir,
 	})
 }
 
@@ -81,16 +86,38 @@ func (s *Server) handleScenarioDetail(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "read xml: %v", err)
 		return
 	}
+	// Prefill: scenario-saved ports override the runner defaults on a
+	// per-field basis. That way a scenario can save only SIP, leaving
+	// RTP to the runner's default, and the form reflects that mix.
+	sipDefault := s.Cfg.VoipPatrolPort
+	rtpStartDefault := s.Cfg.RTPPortStart
+	rtpEndDefault := s.Cfg.RTPPortEnd
+	if scn.Ports.SIP != 0 {
+		sipDefault = scn.Ports.SIP
+	}
+	if scn.Ports.RTPPortStart != 0 {
+		rtpStartDefault = scn.Ports.RTPPortStart
+	}
+	if scn.Ports.RTPPortEnd != 0 {
+		rtpEndDefault = scn.Ports.RTPPortEnd
+	}
 	c.HTML(http.StatusOK, "layout", gin.H{
 		"Title":           scn.Name,
 		"Page":            "scenarios",
 		"ContentTemplate": "content_scenario_detail",
 		"Scenario":        scn,
 		"XML":             xml,
-		"Busy":            s.Runner.IsBusy(),
-		"DefaultSIPPort":  s.Cfg.VoipPatrolPort,
-		"DefaultRTPStart": s.Cfg.RTPPortStart,
-		"DefaultRTPEnd":   s.Cfg.RTPPortEnd,
+		// ScenarioRunning gates the Delete button — same scenario file
+		// being read by a live run shouldn't be removed. Run is now
+		// always enabled since users can pick different ports.
+		"ScenarioRunning": s.Runner.IsScenarioRunning(scn.Name),
+		"ActiveRuns":      s.Runner.ActiveRuns(),
+		"DefaultSIPPort":  sipDefault,
+		"DefaultRTPStart": rtpStartDefault,
+		"DefaultRTPEnd":   rtpEndDefault,
+		// HasSavedPorts controls whether the "Reset saved ports" hint
+		// shows next to the Save button.
+		"HasSavedPorts": scn.Ports != (models.ScenarioPorts{}),
 	})
 }
 
@@ -113,13 +140,24 @@ func (s *Server) handleRun(c *gin.Context) {
 	if user == "" {
 		user = c.GetHeader("X-Forwarded-Email")
 	}
-	// Port overrides from the Run form. Empty strings → 0 → runner
-	// falls back to config defaults. Invalid values → 400 with a
-	// specific message.
+	// Port overrides from the Run form. Empty strings → 0. Precedence
+	// is: form value → scenario's saved ports → runner config
+	// defaults (the runner does the last step itself). We apply the
+	// middle step here so a bare "Run" from the list submits the
+	// scenario's saved ports without needing the detail page.
 	ports, err := parsePorts(c)
 	if err != nil {
 		c.String(http.StatusBadRequest, "%v", err)
 		return
+	}
+	if ports.SIP == 0 {
+		ports.SIP = scn.Ports.SIP
+	}
+	if ports.RTPPortStart == 0 {
+		ports.RTPPortStart = scn.Ports.RTPPortStart
+	}
+	if ports.RTPPortEnd == 0 {
+		ports.RTPPortEnd = scn.Ports.RTPPortEnd
 	}
 	run, err := s.Runner.Start(scn, user, ports)
 	if err != nil {
@@ -276,17 +314,61 @@ func (s *Server) handleScenarioCreate(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/scenarios/"+name)
 }
 
-// handleScenarioDelete removes a scenario's XML file. Refuses while a
-// run is in progress so we don't yank the file out from under a runner
-// that may still be reading it.
+// handleScenarioPortsSave persists the per-scenario default SIP + RTP
+// ports into a sidecar `<name>.ports.json` file next to the XML.
+// Empty field(s) mean "clear that value" — writes a partial file.
+// Fully empty submission removes the sidecar entirely (equivalent to
+// "revert to runner defaults").
+func (s *Server) handleScenarioPortsSave(c *gin.Context) {
+	name := sanitizeScenarioName(c.Param("name"))
+	if name == "" {
+		c.String(http.StatusBadRequest, "invalid name")
+		return
+	}
+	// Verify the scenario exists — no point saving ports for a
+	// scenario that doesn't; also 404 vs. creating an orphan sidecar.
+	if _, err := os.Stat(filepath.Join(s.Cfg.ScenariosDir, name+".xml")); err != nil {
+		c.String(http.StatusNotFound, "scenario %q does not exist", name)
+		return
+	}
+	ports, err := parsePorts(c)
+	if err != nil {
+		c.String(http.StatusBadRequest, "%v", err)
+		return
+	}
+	sp := models.ScenarioPorts{
+		SIP:          ports.SIP,
+		RTPPortStart: ports.RTPPortStart,
+		RTPPortEnd:   ports.RTPPortEnd,
+	}
+	if sp == (models.ScenarioPorts{}) {
+		// All fields blank — treat as "revert to runner defaults" by
+		// removing the sidecar. Nice symmetry with a fresh scenario.
+		if err := models.DeleteScenarioPorts(s.Cfg.ScenariosDir, name); err != nil {
+			c.String(http.StatusInternalServerError, "delete ports: %v", err)
+			return
+		}
+	} else {
+		if err := models.SaveScenarioPorts(s.Cfg.ScenariosDir, name, sp); err != nil {
+			c.String(http.StatusInternalServerError, "save ports: %v", err)
+			return
+		}
+	}
+	c.Redirect(http.StatusSeeOther, "/scenarios/"+name)
+}
+
+// handleScenarioDelete removes a scenario's XML file. Refuses only if
+// this specific scenario is currently being run — voip_patrol may
+// still be reading the file. Other active runs against different
+// scenarios don't block the delete.
 func (s *Server) handleScenarioDelete(c *gin.Context) {
 	name := sanitizeScenarioName(c.Param("name"))
 	if name == "" {
 		c.String(http.StatusBadRequest, "invalid name")
 		return
 	}
-	if s.Runner.IsBusy() {
-		c.String(http.StatusConflict, "runner busy; cannot delete scenario")
+	if s.Runner.IsScenarioRunning(name) {
+		c.String(http.StatusConflict, "scenario %q is currently running; stop the run first", name)
 		return
 	}
 	path := filepath.Join(s.Cfg.ScenariosDir, name+".xml")
@@ -298,6 +380,9 @@ func (s *Server) handleScenarioDelete(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "delete: %v", err)
 		return
 	}
+	// Sidecar is best-effort — if it's already gone or was never
+	// there, the scenario delete still succeeds.
+	_ = models.DeleteScenarioPorts(s.Cfg.ScenariosDir, name)
 	c.Redirect(http.StatusSeeOther, "/scenarios")
 }
 

@@ -2,9 +2,10 @@
 // its stdout/stderr + results.json, parses the per-call JSON, computes
 // aggregates, and persists everything under $RunsDir/<run-id>/.
 //
-// v1 keeps runs serialized (one at a time) — voip_patrol binds a single
-// SIP port, so two concurrent runs would collide. A sync.Mutex enforces
-// this; the UI shows "busy" when a run is already in flight.
+// Runs can execute concurrently as long as their SIP port and RTP
+// range don't overlap with any other in-flight run. The Runner keeps
+// a small in-memory registry of active runs and refuses to Start a
+// new one whose ports would collide.
 package controller
 
 import (
@@ -25,48 +26,150 @@ import (
 )
 
 // Runner spawns voip_patrol and processes its output. One per server;
-// the Mutex serializes runs.
+// activeMu guards the registry of in-flight runs.
 type Runner struct {
 	Cfg *config.Config
-	mu  sync.Mutex
 
-	// state below is guarded by stateMu, NOT mu. mu is held across the
-	// entire background run and Stop needs to poke into the running
-	// goroutine's state without blocking on it.
-	stateMu      sync.Mutex
-	currentID    string             // "" when idle
-	currentCancel context.CancelFunc // nil when idle
-	stoppedBy    string             // set by Stop, read by execute to record the run's Error
+	activeMu sync.Mutex
+	active   map[string]*activeRun // keyed by Run.ID
 }
 
-// IsBusy reports whether a run is currently in flight.
-func (r *Runner) IsBusy() bool {
-	if r.mu.TryLock() {
-		r.mu.Unlock()
-		return false
+// activeRun is the in-memory record of a currently-executing run.
+// Lifetime: registered in Start (under activeMu, after canAllocate
+// succeeds), removed by execute's defer when voip_patrol exits.
+type activeRun struct {
+	id           string
+	scenario     string
+	sipPort      int
+	rtpPortStart int
+	rtpPortEnd   int
+	startedAt    time.Time
+	startedBy    string
+	cancel       context.CancelFunc
+	stoppedBy    string // set by Stop, read by execute to record the run's Error
+}
+
+// ActiveRun is the exported view of an in-flight run, safe for the UI
+// to read. Snapshotted under activeMu so callers don't share state
+// with the goroutine.
+type ActiveRun struct {
+	ID           string
+	Scenario     string
+	SIPPort      int
+	RTPPortStart int
+	RTPPortEnd   int
+	StartedAt    time.Time
+	StartedBy    string
+}
+
+// ActiveRuns returns a snapshot of all runs currently in flight,
+// sorted by StartedAt ascending. Empty when nothing is running.
+func (r *Runner) ActiveRuns() []ActiveRun {
+	r.activeMu.Lock()
+	defer r.activeMu.Unlock()
+	out := make([]ActiveRun, 0, len(r.active))
+	for _, a := range r.active {
+		out = append(out, ActiveRun{
+			ID:           a.id,
+			Scenario:     a.scenario,
+			SIPPort:      a.sipPort,
+			RTPPortStart: a.rtpPortStart,
+			RTPPortEnd:   a.rtpPortEnd,
+			StartedAt:    a.startedAt,
+			StartedBy:    a.startedBy,
+		})
 	}
-	return true
+	sort.Slice(out, func(i, j int) bool { return out[i].StartedAt.Before(out[j].StartedAt) })
+	return out
 }
 
-// Stop cancels the currently-running voip_patrol process. Returns an
-// error if no run is in flight or if id doesn't match the current run
-// (so a stale browser tab firing /runs/<old-id>/stop doesn't kill the
-// wrong run). stoppedBy is stamped into the run's Error field for
-// audit; execute() consumes it when the process exits.
+// IsScenarioRunning reports whether at least one active run is
+// executing the given scenario. Used by the scenario-delete handler
+// to refuse deletion of a scenario that's currently in use, and by
+// the scenario-detail template to disable the local Run button when
+// this scenario's already running with the default ports.
+func (r *Runner) IsScenarioRunning(scenario string) bool {
+	r.activeMu.Lock()
+	defer r.activeMu.Unlock()
+	for _, a := range r.active {
+		if a.scenario == scenario {
+			return true
+		}
+	}
+	return false
+}
+
+// DefaultPortsInUse reports whether any active run occupies the
+// runner's default SIP port or overlaps its default RTP range. The
+// scenarios-list "Run" button uses this to decide whether to gray
+// itself out — since that button submits without per-run overrides,
+// starting it while defaults are taken would just 409.
+func (r *Runner) DefaultPortsInUse() bool {
+	r.activeMu.Lock()
+	defer r.activeMu.Unlock()
+	for _, a := range r.active {
+		if a.sipPort == r.Cfg.VoipPatrolPort {
+			return true
+		}
+		if rangesOverlap(a.rtpPortStart, a.rtpPortEnd, r.Cfg.RTPPortStart, r.Cfg.RTPPortEnd) {
+			return true
+		}
+	}
+	return false
+}
+
+// canAllocate returns nil iff the requested ports don't overlap with
+// any currently-active run. Called under activeMu (the caller holds
+// it and immediately registers the run on success — the check + insert
+// must be atomic or two racing Start()s could both pass).
+func (r *Runner) canAllocate(sip, rtpStart, rtpEnd int) error {
+	if sip <= 0 || rtpStart <= 0 || rtpEnd <= 0 {
+		return fmt.Errorf("invalid ports (sip=%d rtp=%d-%d)", sip, rtpStart, rtpEnd)
+	}
+	if rtpStart > rtpEnd {
+		return fmt.Errorf("rtp start %d > end %d", rtpStart, rtpEnd)
+	}
+	// Deliberately no check for SIP-inside-RTP-range. In practice SIP
+	// binds one specific port (5060, 5093, etc.) and voip_patrol's RTP
+	// pool grabs from a wide range that often numerically contains it.
+	// pjsip doesn't allocate the SIP port for RTP, so there's no real
+	// conflict. Rejecting this combination breaks the common case of
+	// SIP 5060 with a big RTP pool.
+	for _, a := range r.active {
+		if sip == a.sipPort {
+			return fmt.Errorf("SIP port %d already in use by run %s", sip, a.id)
+		}
+		if rangesOverlap(rtpStart, rtpEnd, a.rtpPortStart, a.rtpPortEnd) {
+			return fmt.Errorf("RTP range %d-%d overlaps run %s (using %d-%d)",
+				rtpStart, rtpEnd, a.id, a.rtpPortStart, a.rtpPortEnd)
+		}
+	}
+	return nil
+}
+
+// rangesOverlap returns true when [a1,a2] intersects [b1,b2].
+// Callers guarantee a1<=a2 and b1<=b2.
+func rangesOverlap(a1, a2, b1, b2 int) bool {
+	return a1 <= b2 && b1 <= a2
+}
+
+// Stop cancels the specified in-flight run's voip_patrol process.
+// Returns an error if id doesn't match a currently-active run (so a
+// stale browser tab firing /runs/<old-id>/stop can't kill an
+// unrelated new run). stoppedBy is stamped into the run's Error field
+// for audit; execute() consumes it when the process exits.
 func (r *Runner) Stop(id, stoppedBy string) error {
-	r.stateMu.Lock()
-	defer r.stateMu.Unlock()
-	if r.currentID == "" {
-		return fmt.Errorf("no run in progress")
+	r.activeMu.Lock()
+	defer r.activeMu.Unlock()
+	a, ok := r.active[id]
+	if !ok {
+		return fmt.Errorf("run %q is not currently running", id)
 	}
-	if r.currentID != id {
-		return fmt.Errorf("run %q is not the current run (current: %q)", id, r.currentID)
-	}
-	r.stoppedBy = stoppedBy
+	a.stoppedBy = stoppedBy
 	// Cancelling the context triggers exec.CommandContext to signal the
 	// child (SIGKILL by default on Unix) and Run() returns with a
 	// non-nil err. execute() sees stoppedBy and records Status=stopped.
-	r.currentCancel()
+	a.cancel()
 	return nil
 }
 
@@ -80,49 +183,85 @@ type Ports struct {
 }
 
 // Start kicks off a scenario run and returns the freshly-created Run
-// record (status=running). The actual voip_patrol execution proceeds in
-// a background goroutine using a context that's independent of the
+// record (status=running). The actual voip_patrol execution proceeds
+// in a background goroutine using a context that's independent of the
 // HTTP request — so navigating away from the page or closing the tab
-// doesn't kill the run. The mutex is held across the whole goroutine.
+// doesn't kill the run.
 //
-// startedBy is the authenticated user (oauth2-proxy's X-Forwarded-Email
-// header) or "" when auth is off. Persisted to run.json for audit;
-// the runner itself doesn't use it.
+// startedBy is the authenticated user (from the auth middleware) or
+// "" when auth is off. Persisted to run.json for audit; the runner
+// itself doesn't use it.
 //
 // ports overrides the SIP/RTP ports for this run only. Zero fields =
 // use the runner's config defaults.
 //
-// On error before exec (mutex busy, scenario dir missing, etc.) Start
-// returns an error and no Run; the goroutine itself never returns an
-// error — failures land in run.Status / run.Error inside run.json.
+// Concurrent runs are allowed as long as their SIP port and RTP range
+// don't overlap with any currently-active run. On collision (or any
+// pre-exec error), Start returns an error and no Run; the goroutine
+// itself never returns an error — failures land in run.Status /
+// run.Error inside run.json.
 func (r *Runner) Start(scenario *models.Scenario, startedBy string, ports Ports) (*models.Run, error) {
-	if !r.mu.TryLock() {
-		return nil, fmt.Errorf("another run is in progress")
+	sip := firstNonZero(ports.SIP, r.Cfg.VoipPatrolPort)
+	rtpStart := firstNonZero(ports.RTPPortStart, r.Cfg.RTPPortStart)
+	rtpEnd := firstNonZero(ports.RTPPortEnd, r.Cfg.RTPPortEnd)
+
+	// Create the context before taking activeMu so we can register its
+	// cancel with the activeRun record atomically. Same 10-minute
+	// upper bound as before; execute()'s defer calls the same cancel
+	// on the way out to release the timer.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+
+	// canAllocate + insert must be atomic; two concurrent Starts must
+	// not both pass the check and both register.
+	r.activeMu.Lock()
+	if err := r.canAllocate(sip, rtpStart, rtpEnd); err != nil {
+		r.activeMu.Unlock()
+		cancel()
+		return nil, err
 	}
 
 	run, err := models.NewRun(r.Cfg.RunsDir, scenario.Name)
 	if err != nil {
-		r.mu.Unlock()
+		r.activeMu.Unlock()
+		cancel()
 		return nil, fmt.Errorf("new run: %w", err)
 	}
 	run.StartedBy = startedBy
 	// Record the effective ports (after fallback) on the run itself so
 	// the detail page can show what voip_patrol actually bound and old
 	// runs remain distinguishable after a config change.
-	run.SIPPort = firstNonZero(ports.SIP, r.Cfg.VoipPatrolPort)
-	run.RTPPortStart = firstNonZero(ports.RTPPortStart, r.Cfg.RTPPortStart)
-	run.RTPPortEnd = firstNonZero(ports.RTPPortEnd, r.Cfg.RTPPortEnd)
+	run.SIPPort = sip
+	run.RTPPortStart = rtpStart
+	run.RTPPortEnd = rtpEnd
+
+	if r.active == nil {
+		r.active = make(map[string]*activeRun)
+	}
+	r.active[run.ID] = &activeRun{
+		id:           run.ID,
+		scenario:     scenario.Name,
+		sipPort:      sip,
+		rtpPortStart: rtpStart,
+		rtpPortEnd:   rtpEnd,
+		startedAt:    run.StartedAt,
+		startedBy:    startedBy,
+		cancel:       cancel,
+	}
+	r.activeMu.Unlock()
+
 	// Persist the running-state record so the UI can show it
-	// immediately after the redirect.
+	// immediately after the redirect. Done after registering in the
+	// active map so IsScenarioRunning / DefaultPortsInUse see it
+	// consistently.
 	if err := run.Save(r.Cfg.RunsDir); err != nil {
-		r.mu.Unlock()
+		r.activeMu.Lock()
+		delete(r.active, run.ID)
+		r.activeMu.Unlock()
+		cancel()
 		return nil, fmt.Errorf("save run: %w", err)
 	}
 
-	go func() {
-		defer r.mu.Unlock()
-		r.execute(run, scenario)
-	}()
+	go r.execute(ctx, cancel, run, scenario)
 	return run, nil
 }
 
@@ -138,28 +277,37 @@ func firstNonZero(a, b int) int {
 // goroutine — the http handler that invoked Start has long since
 // returned by the time this finishes.
 //
-// 10-minute upper bound on the spawn so a stuck voip_patrol doesn't
-// pin the runner mutex forever; well above any reasonable scenario.
-func (r *Runner) execute(run *models.Run, scenario *models.Scenario) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+// ctx/cancel are owned by Start (registered in the active map so
+// Stop can cancel this run). execute cancels once on the way out to
+// release the timeout timer and unregisters the run.
+func (r *Runner) execute(ctx context.Context, cancel context.CancelFunc, run *models.Run, scenario *models.Scenario) {
 	defer cancel()
-
-	// Publish state so Stop() can cancel this run. Reset on the way out
-	// so a subsequent Stop() against a completed id fails cleanly.
-	r.stateMu.Lock()
-	r.currentID = run.ID
-	r.currentCancel = cancel
-	r.stoppedBy = ""
-	r.stateMu.Unlock()
+	// Unregister from the active map exactly once, when we're done.
+	// A goroutine holding stale a.cancel is harmless: cancelling an
+	// already-cancelled ctx is a no-op.
 	defer func() {
-		r.stateMu.Lock()
-		r.currentID = ""
-		r.currentCancel = nil
-		r.stoppedBy = ""
-		r.stateMu.Unlock()
+		r.activeMu.Lock()
+		delete(r.active, run.ID)
+		r.activeMu.Unlock()
 	}()
 
 	runDir := run.Dir(r.Cfg.RunsDir)
+
+	// voip_patrol scenarios reference WAVs by relative path
+	// ("voice_ref_files/reference_8000.wav"), resolved against cwd.
+	// We set cwd = runDir, so symlink the shared voice_ref_files dir
+	// into runDir under that exact name. Best-effort: an error here
+	// just means scenarios needing ref files will fail with the
+	// underlying "not found" — same as before this fix.
+	if r.Cfg.VoiceRefDir != "" {
+		link := filepath.Join(runDir, "voice_ref_files")
+		if err := os.Symlink(r.Cfg.VoiceRefDir, link); err != nil && !os.IsExist(err) {
+			// Log to the run's stdout.log via a placeholder — we can't
+			// open logFile yet (needed for cmd wiring below). Keep going.
+			fmt.Fprintf(os.Stderr, "ace: symlink voice_ref_files: %v\n", err)
+		}
+	}
+
 	args := []string{
 		"--port", fmt.Sprintf("%d", run.SIPPort),
 		"--rtp-port", fmt.Sprintf("%d", run.RTPPortStart),
@@ -199,9 +347,12 @@ func (r *Runner) execute(run *models.Run, scenario *models.Scenario) {
 	// the actual root cause. An explicit Stop() gets its own status so
 	// the UI can render it distinctly and the audit trail records who
 	// hit the button.
-	r.stateMu.Lock()
-	stoppedBy := r.stoppedBy
-	r.stateMu.Unlock()
+	r.activeMu.Lock()
+	stoppedBy := ""
+	if a, ok := r.active[run.ID]; ok {
+		stoppedBy = a.stoppedBy
+	}
+	r.activeMu.Unlock()
 	if stoppedBy != "" {
 		run.Status = "stopped"
 		run.Error = fmt.Sprintf("stopped by %s", stoppedBy)

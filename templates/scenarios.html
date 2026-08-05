@@ -5,6 +5,13 @@
 </div>
 <p class="text-muted small">Scenario XML files live in <code>{{ .ScenariosDir }}</code>. Drop a file there or use the editor.</p>
 
+{{ if .ActiveRuns }}
+<div class="alert alert-info small py-2 mb-3">
+  <strong>{{ len .ActiveRuns }} run{{ if gt (len .ActiveRuns) 1 }}s{{ end }} in flight:</strong>
+  {{ range $i, $r := .ActiveRuns }}{{ if $i }}, {{ end }}<a href="/runs/{{ $r.ID }}" class="alert-link">{{ $r.Scenario }}</a> <span class="text-muted">(SIP {{ $r.SIPPort }}, RTP {{ $r.RTPPortStart }}–{{ $r.RTPPortEnd }})</span>{{ end }}
+</div>
+{{ end }}
+
 <div id="new-scenario" class="d-none border rounded p-3 mb-4 bg-light">
   <form method="post" action="/scenarios">
     <div class="mb-2">
@@ -30,10 +37,10 @@
       <td class="small text-muted">{{ .ModTime.Format "2006-01-02 15:04:05" }}</td>
       <td class="text-end">
         <form method="post" action="/scenarios/{{ .Name }}/run" class="d-inline">
-          <button type="submit" class="btn btn-sm btn-primary" {{ if $.Busy }}disabled{{ end }}>Run</button>
+          <button type="submit" class="btn btn-sm btn-primary" {{ if $.DefaultsBusy }}disabled title="Default ports in use — open the scenario to pick free ports"{{ end }}>Run</button>
         </form>
         <form method="post" action="/scenarios/{{ .Name }}/delete" class="d-inline" onsubmit="return confirm('Delete scenario {{ .Name }}?');">
-          <button type="submit" class="btn btn-sm btn-outline-danger" {{ if $.Busy }}disabled{{ end }}>Delete</button>
+          <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
         </form>
       </td>
     </tr>

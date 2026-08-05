@@ -16,11 +16,23 @@
       <div class="col-auto"><span class="small text-muted">–</span></div>
       <div class="col-auto"><input type="number" name="rtp_end" value="{{ .DefaultRTPEnd }}" min="1024" max="65535" class="form-control form-control-sm" style="width:6em"></div>
       <div class="col-auto">
-        <button type="submit" class="btn btn-primary" {{ if .Busy }}disabled{{ end }}>Run scenario</button>
+        <button type="submit" class="btn btn-primary">Run scenario</button>
       </div>
+      <!-- formaction switches the submit target so the same 3 inputs
+           feed both "run once" and "save as defaults" without a
+           second form or JS. Bootstrap: rendered as a small
+           secondary button to the right of Run. -->
+      <div class="col-auto">
+        <button type="submit" class="btn btn-outline-secondary btn-sm"
+                formaction="/scenarios/{{ .Scenario.Name }}/ports"
+                title="Save these ports as the scenario's defaults">Save as defaults</button>
+      </div>
+      {{ if .HasSavedPorts }}
+      <div class="col-auto"><span class="small text-muted">saved</span></div>
+      {{ end }}
     </form>
     <form method="post" action="/scenarios/{{ .Scenario.Name }}/delete" class="d-inline" onsubmit="return confirm('Delete scenario {{ .Scenario.Name }}?');">
-      <button type="submit" class="btn btn-outline-danger" {{ if .Busy }}disabled{{ end }}>Delete</button>
+      <button type="submit" class="btn btn-outline-danger" {{ if .ScenarioRunning }}disabled title="This scenario is currently running"{{ end }}>Delete</button>
     </form>
   </div>
 </div>
@@ -30,6 +42,13 @@
   · {{ .Scenario.SizeBytes }} B
   · modified {{ .Scenario.ModTime.Format "2006-01-02 15:04:05" }}
 </p>
+
+{{ if .ActiveRuns }}
+<div class="alert alert-info small py-2 mb-3">
+  <strong>Ports in use:</strong>
+  {{ range $i, $r := .ActiveRuns }}{{ if $i }} · {{ end }}<a href="/runs/{{ $r.ID }}" class="alert-link">{{ $r.Scenario }}</a> <span class="text-muted">SIP {{ $r.SIPPort }}, RTP {{ $r.RTPPortStart }}–{{ $r.RTPPortEnd }}</span>{{ end }}
+</div>
+{{ end }}
 
 <form method="post" action="/scenarios/{{ .Scenario.Name }}" id="save-form">
   <textarea name="xml" id="xml-editor" class="form-control" style="font-family:monospace; min-height:60vh;">{{ .XML }}</textarea>
