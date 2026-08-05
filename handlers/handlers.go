@@ -35,6 +35,7 @@ func (s *Server) Register(r *gin.Engine) {
 	r.POST("/scenarios/:name", s.handleScenarioSave)
 	r.POST("/scenarios/:name/delete", s.handleScenarioDelete)
 	r.POST("/scenarios/:name/run", s.handleRun)
+	r.POST("/runs/:id/stop", s.handleRunStop)
 	r.GET("/runs", s.handleRuns)
 	r.GET("/runs/:id", s.handleRunDetail)
 	r.GET("/runs/:id/log", s.handleRunLog)
@@ -286,6 +287,30 @@ func (s *Server) handleScenarioDelete(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/scenarios")
+}
+
+// handleRunStop asks the runner to kill the currently-executing
+// voip_patrol. Refuses if the id doesn't match the current run (a
+// stale browser tab firing /runs/<old>/stop shouldn't kill an
+// unrelated new run) or if nothing is running at all.
+func (s *Server) handleRunStop(c *gin.Context) {
+	id := sanitizeRunID(c.Param("id"))
+	if id == "" {
+		c.String(http.StatusBadRequest, "invalid run id")
+		return
+	}
+	user := c.GetString(ctxUserKey)
+	if user == "" {
+		user = c.GetHeader("X-Forwarded-Email")
+	}
+	if user == "" {
+		user = "anonymous"
+	}
+	if err := s.Runner.Stop(id, user); err != nil {
+		c.String(http.StatusConflict, "%v", err)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/runs/"+id)
 }
 
 // handleRunDelete removes a run's directory (run.json, stdout.log,

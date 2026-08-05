@@ -29,6 +29,14 @@ import (
 type Runner struct {
 	Cfg *config.Config
 	mu  sync.Mutex
+
+	// state below is guarded by stateMu, NOT mu. mu is held across the
+	// entire background run and Stop needs to poke into the running
+	// goroutine's state without blocking on it.
+	stateMu      sync.Mutex
+	currentID    string             // "" when idle
+	currentCancel context.CancelFunc // nil when idle
+	stoppedBy    string             // set by Stop, read by execute to record the run's Error
 }
 
 // IsBusy reports whether a run is currently in flight.
@@ -38,6 +46,28 @@ func (r *Runner) IsBusy() bool {
 		return false
 	}
 	return true
+}
+
+// Stop cancels the currently-running voip_patrol process. Returns an
+// error if no run is in flight or if id doesn't match the current run
+// (so a stale browser tab firing /runs/<old-id>/stop doesn't kill the
+// wrong run). stoppedBy is stamped into the run's Error field for
+// audit; execute() consumes it when the process exits.
+func (r *Runner) Stop(id, stoppedBy string) error {
+	r.stateMu.Lock()
+	defer r.stateMu.Unlock()
+	if r.currentID == "" {
+		return fmt.Errorf("no run in progress")
+	}
+	if r.currentID != id {
+		return fmt.Errorf("run %q is not the current run (current: %q)", id, r.currentID)
+	}
+	r.stoppedBy = stoppedBy
+	// Cancelling the context triggers exec.CommandContext to signal the
+	// child (SIGKILL by default on Unix) and Run() returns with a
+	// non-nil err. execute() sees stoppedBy and records Status=stopped.
+	r.currentCancel()
+	return nil
 }
 
 // Start kicks off a scenario run and returns the freshly-created Run
@@ -89,6 +119,21 @@ func (r *Runner) execute(run *models.Run, scenario *models.Scenario) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
+	// Publish state so Stop() can cancel this run. Reset on the way out
+	// so a subsequent Stop() against a completed id fails cleanly.
+	r.stateMu.Lock()
+	r.currentID = run.ID
+	r.currentCancel = cancel
+	r.stoppedBy = ""
+	r.stateMu.Unlock()
+	defer func() {
+		r.stateMu.Lock()
+		r.currentID = ""
+		r.currentCancel = nil
+		r.stoppedBy = ""
+		r.stateMu.Unlock()
+	}()
+
 	runDir := run.Dir(r.Cfg.RunsDir)
 	args := []string{
 		"--port", fmt.Sprintf("%d", r.Cfg.VoipPatrolPort),
@@ -124,8 +169,16 @@ func (r *Runner) execute(run *models.Run, scenario *models.Scenario) {
 	}
 	// Exec-level failures (binary not found, ctx-canceled, signal-killed
 	// before producing output) win over downstream parse errors — they're
-	// the actual root cause.
-	if runErr != nil {
+	// the actual root cause. An explicit Stop() gets its own status so
+	// the UI can render it distinctly and the audit trail records who
+	// hit the button.
+	r.stateMu.Lock()
+	stoppedBy := r.stoppedBy
+	r.stateMu.Unlock()
+	if stoppedBy != "" {
+		run.Status = "stopped"
+		run.Error = fmt.Sprintf("stopped by %s", stoppedBy)
+	} else if runErr != nil {
 		run.Status = "error"
 		run.Error = fmt.Sprintf("voip_patrol: %v", runErr)
 	}
@@ -136,7 +189,7 @@ func (r *Runner) execute(run *models.Run, scenario *models.Scenario) {
 	calls, parseErr := loadVoipPatrolResults(filepath.Join(run.Dir(r.Cfg.RunsDir), "results.json"))
 	run.Calls = calls
 	run.Aggregate = aggregate(calls)
-	if run.Status != "error" {
+	if run.Status != "error" && run.Status != "stopped" {
 		run.Status = "done"
 		if parseErr != nil && len(calls) == 0 {
 			// Only surface parse errors when nothing else went wrong AND

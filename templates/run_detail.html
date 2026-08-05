@@ -8,9 +8,16 @@
 
 <div class="d-flex justify-content-between align-items-center">
   <h1 class="h3 mb-0">{{ .Scenario }}</h1>
-  <form method="post" action="/runs/{{ .ID }}/delete" class="d-inline" onsubmit="return confirm('Delete run {{ .ID }}?');">
-    <button type="submit" class="btn btn-sm btn-outline-danger" {{ if eq .Status "running" }}disabled{{ end }}>Delete run</button>
-  </form>
+  <div>
+    {{ if eq .Status "running" }}
+    <form method="post" action="/runs/{{ .ID }}/stop" class="d-inline" onsubmit="return confirm('Stop run {{ .ID }}? voip_patrol will be terminated.');">
+      <button type="submit" class="btn btn-sm btn-warning">Stop run</button>
+    </form>
+    {{ end }}
+    <form method="post" action="/runs/{{ .ID }}/delete" class="d-inline" onsubmit="return confirm('Delete run {{ .ID }}?');">
+      <button type="submit" class="btn btn-sm btn-outline-danger" {{ if eq .Status "running" }}disabled{{ end }}>Delete run</button>
+    </form>
+  </div>
 </div>
 <p class="small text-muted">
   <code>{{ .ID }}</code> ·
@@ -19,6 +26,7 @@
   · exit {{ .ExitCode }}
   · {{ if eq .Status "done" }}<span class="badge bg-success">done</span>
     {{ else if eq .Status "error" }}<span class="badge bg-danger">error</span>
+    {{ else if eq .Status "stopped" }}<span class="badge bg-warning text-dark">stopped</span>
     {{ else }}<span class="badge bg-secondary">{{ .Status }}</span>{{ end }}
 </p>
 

@@ -22,6 +22,7 @@
         {{ if eq .Status "done" }}<span class="badge bg-success">done</span>
         {{ else if eq .Status "running" }}<span class="badge bg-warning text-dark">running</span>
         {{ else if eq .Status "error" }}<span class="badge bg-danger">error</span>
+        {{ else if eq .Status "stopped" }}<span class="badge bg-warning text-dark">stopped</span>
         {{ else }}<span class="badge bg-secondary">{{ .Status }}</span>{{ end }}
       </td>
       <td class="text-end">
@@ -35,6 +36,11 @@
       <td class="text-end small text-muted">{{ if .Aggregate.MOSAvgTx }}{{ printf "%.2f" .Aggregate.MOSAvgTx }}{{ end }}</td>
       <td class="small text-muted">{{ .StartedAt.Format "2006-01-02 15:04:05" }}</td>
       <td class="text-end">
+        {{ if eq .Status "running" }}
+        <form method="post" action="/runs/{{ .ID }}/stop" class="d-inline" onsubmit="return confirm('Stop run {{ .ID }}?');">
+          <button type="submit" class="btn btn-sm btn-warning">Stop</button>
+        </form>
+        {{ end }}
         <form method="post" action="/runs/{{ .ID }}/delete" class="d-inline" onsubmit="return confirm('Delete run {{ .ID }}?');">
           <button type="submit" class="btn btn-sm btn-outline-danger" {{ if eq .Status "running" }}disabled{{ end }}>Delete</button>
         </form>
