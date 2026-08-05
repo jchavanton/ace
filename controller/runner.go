@@ -46,10 +46,14 @@ func (r *Runner) IsBusy() bool {
 // HTTP request — so navigating away from the page or closing the tab
 // doesn't kill the run. The mutex is held across the whole goroutine.
 //
+// startedBy is the authenticated user (oauth2-proxy's X-Forwarded-Email
+// header) or "" when auth is off. Persisted to run.json for audit;
+// the runner itself doesn't use it.
+//
 // On error before exec (mutex busy, scenario dir missing, etc.) Start
 // returns an error and no Run; the goroutine itself never returns an
 // error — failures land in run.Status / run.Error inside run.json.
-func (r *Runner) Start(scenario *models.Scenario) (*models.Run, error) {
+func (r *Runner) Start(scenario *models.Scenario, startedBy string) (*models.Run, error) {
 	if !r.mu.TryLock() {
 		return nil, fmt.Errorf("another run is in progress")
 	}
@@ -59,6 +63,7 @@ func (r *Runner) Start(scenario *models.Scenario) (*models.Run, error) {
 		r.mu.Unlock()
 		return nil, fmt.Errorf("new run: %w", err)
 	}
+	run.StartedBy = startedBy
 	// Persist the running-state record so the UI can show it
 	// immediately after the redirect.
 	if err := run.Save(r.Cfg.RunsDir); err != nil {
@@ -84,19 +89,20 @@ func (r *Runner) execute(run *models.Run, scenario *models.Scenario) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
+	runDir := run.Dir(r.Cfg.RunsDir)
 	args := []string{
 		"--port", fmt.Sprintf("%d", r.Cfg.VoipPatrolPort),
 		"-c", scenario.Path,
+		"--record-dir", runDir,
 	}
 	if r.Cfg.PublicAddress != "" {
 		args = append(args, "--public-address", r.Cfg.PublicAddress)
 	}
 
-	// voip_patrol writes results.json + record_*.wav to its cwd. Setting
-	// Dir to the run's output dir keeps every artifact bundled per-run
-	// without naming-collision juggling.
+	// voip_patrol writes results.json to cwd; recordings go to --record-dir.
+	// We set both to the run dir so every artifact lands bundled per-run.
 	cmd := exec.CommandContext(ctx, r.Cfg.VoipPatrolBin, args...)
-	cmd.Dir = run.Dir(r.Cfg.RunsDir)
+	cmd.Dir = runDir
 
 	logPath := filepath.Join(run.Dir(r.Cfg.RunsDir), "stdout.log")
 	logFile, err := os.Create(logPath)

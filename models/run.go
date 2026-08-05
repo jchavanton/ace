@@ -21,6 +21,7 @@ type Run struct {
 	ID           string    `json:"id"`            // dir name; sortable lexicographically
 	Scenario     string    `json:"scenario"`      // scenario name
 	StartedAt    time.Time `json:"started_at"`
+	StartedBy    string    `json:"started_by,omitempty"` // authenticated email from oauth2-proxy; empty when auth is off
 	FinishedAt   time.Time `json:"finished_at,omitempty"`
 	Status       string    `json:"status"`        // running | done | error
 	ExitCode     int       `json:"exit_code"`

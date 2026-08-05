@@ -23,8 +23,11 @@ type Server struct {
 	Runner *controller.Runner
 }
 
-// Register installs the routes on r.
+// Register installs the routes on r. When Cfg.BasicAuthHtpasswd is set,
+// a Basic-Auth middleware runs on every route; empty = no auth (matches
+// the LAN-only default).
 func (s *Server) Register(r *gin.Engine) {
+	r.Use(basicAuth(s.Cfg.BasicAuthHtpasswd))
 	r.GET("/", s.handleIndex)
 	r.GET("/scenarios", s.handleScenarios)
 	r.POST("/scenarios", s.handleScenarioCreate)
@@ -95,7 +98,15 @@ func (s *Server) handleRun(c *gin.Context) {
 	// immediately with the run record (status=running). We redirect to
 	// the run detail page; the goroutine outlives this HTTP request, so
 	// navigating away or closing the tab doesn't kill voip_patrol.
-	run, err := s.Runner.Start(scn)
+	// Prefer the authenticated user from the basic-auth middleware; fall
+	// back to X-Forwarded-Email so the field stays populated if an
+	// oauth2-proxy is later put in front. Empty when auth is disabled —
+	// StartedBy just stays blank in run.json.
+	user := c.GetString(ctxUserKey)
+	if user == "" {
+		user = c.GetHeader("X-Forwarded-Email")
+	}
+	run, err := s.Runner.Start(scn, user)
 	if err != nil {
 		c.String(http.StatusConflict, "run failed to start: %v", err)
 		return

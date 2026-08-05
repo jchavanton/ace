@@ -16,26 +16,12 @@
 # host's interfaces.
 
 # --- Stage 1: voip_patrol -----------------------------------------------------
-FROM debian:trixie AS voip_patrol_builder
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential libcurl4-openssl-dev cmake pkg-config \
-        libasound2-dev libopus0 libopus-dev libssl-dev libuuid1 uuid-dev \
-        git ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy local checkout (includes our null-pointer fix). The build is
-# self-contained: pjproject lives under voip_patrol/pjproject/ as a
-# submodule, already pulled. The `voip_patrol` build context is wired
-# in docker-compose.yml's additional_contexts.
-COPY --from=voip_patrol . /git/voip_patrol
-
-RUN cd /git/voip_patrol \
-    && rm -rf CMakeCache.txt CMakeFiles cmake_install.cmake Makefile \
-    && cp include/config_site.h pjproject/pjlib/include/pj/config_site.h \
-    && cd pjproject && ./configure --disable-libwebrtc --disable-opencore-amr \
-    && make dep && make && make install \
-    && cd .. && cmake CMakeLists.txt && make
+# Pull a prebuilt image rather than building from source: the tone_detector
+# branch needs pjproject patches that are baked into this image. To rebuild
+# locally instead, swap this back to the debian:trixie source-build flow
+# from the git history (the additional_contexts wiring in docker-compose.yml
+# is preserved for that path).
+FROM jchavanton/voip_patrol:tone_detector AS voip_patrol_builder
 
 # --- Stage 2: ace -------------------------------------------------------------
 FROM golang:1.22-bookworm AS ace_builder
@@ -89,4 +75,5 @@ CMD ["/bin/sh", "-c", "exec /usr/local/bin/ace \
     -voip-patrol-port ${ACE_VOIP_PATROL_PORT:-5093} \
     -scenarios-dir ${ACE_SCENARIOS_DIR} \
     -runs-dir ${ACE_RUNS_DIR} \
-    ${ACE_PUBLIC_ADDRESS:+-public-address ${ACE_PUBLIC_ADDRESS}}"]
+    ${ACE_PUBLIC_ADDRESS:+-public-address ${ACE_PUBLIC_ADDRESS}} \
+    ${ACE_BASIC_AUTH_HTPASSWD:+-basic-auth-htpasswd ${ACE_BASIC_AUTH_HTPASSWD}}"]

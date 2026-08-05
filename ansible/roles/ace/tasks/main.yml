@@ -20,6 +20,22 @@
   ansible.builtin.set_fact:
     ace_public_address_effective: "{{ ace_public_address | default('') }}"
 
+# Basic auth is enforced by ace itself, so no bind-address rewrite is
+# needed — the same 0.0.0.0:8086 listener now requires credentials.
+- name: Resolve ace bind address
+  ansible.builtin.set_fact:
+    ace_http_addr_effective: "{{ ace_http_addr }}"
+
+- name: Validate auth vars when auth enabled
+  ansible.builtin.assert:
+    that:
+      - ace_basic_auth_users | length > 0
+    fail_msg: >-
+      ace_auth_enabled=true but ace_basic_auth_users is empty. Add at
+      least one "user:$2y$..." line (bcrypt) to the vault-encrypted
+      group_vars file.
+  when: ace_auth_enabled | default(false)
+
 # Source code → target. Use rsync (synchronize module) so re-deploys
 # only ship the delta. The build context for ace is the install dir;
 # voip_patrol is a sibling so the Dockerfile's additional_contexts
@@ -97,6 +113,28 @@
     group: root
     mode: '0755'
 
+# Auth dir always exists — the compose bind-mount references it whether
+# auth is on or off, and docker won't create the source dir for you.
+- name: Ensure auth dir exists
+  ansible.builtin.file:
+    path: "{{ ace_install_dir }}/auth"
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Render htpasswd
+  ansible.builtin.template:
+    src: htpasswd.j2
+    dest: "{{ ace_install_dir }}/auth/htpasswd"
+    owner: root
+    group: root
+    mode: '0640'
+  when: ace_auth_enabled | default(false)
+  # No restart needed — ace re-reads the file every 10s. The compose
+  # restart from .env changes is enough for the ACE_BASIC_AUTH_HTPASSWD
+  # env var to take effect on first enable.
+
 # `docker compose up -d --build` is the single source of truth. The
 # --build flag re-runs the image build only when the Dockerfile / source
 # changed; otherwise it's a fast no-op. changed_when keys off compose's
@@ -112,15 +150,20 @@
     'Recreated' in compose_up.stderr or
     'Built' in compose_up.stderr
 
+# Health check accepts 200 (auth off) or 401 (auth on, no creds sent) —
+# both mean ace is up and serving. 401 with a valid WWW-Authenticate
+# header is the correct response when the middleware is active.
 - name: Wait for ace HTTP to come up
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ ace_http_addr | regex_replace('^.*:', '') }}/scenarios"
-    status_code: 200
+    url: "http://127.0.0.1:{{ ace_http_addr_effective | regex_replace('^.*:', '') }}/scenarios"
+    status_code: [200, 401]
   register: ace_health
-  until: ace_health.status == 200
+  until: ace_health.status in [200, 401]
   retries: 12
   delay: 5
 
 - name: Show ace URL
   ansible.builtin.debug:
-    msg: "ace is up — http://{{ inventory_hostname }}:{{ ace_http_addr | regex_replace('^.*:', '') }}/"
+    msg: >-
+      {{ 'ace is up — http://' ~ inventory_hostname ~ ':' ~ (ace_http_addr | regex_replace('^.*:', '')) ~ '/'
+         ~ (' (auth: HTTP Basic)' if ace_auth_enabled | default(false) else '') }}

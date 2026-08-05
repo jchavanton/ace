@@ -1,0 +1,15 @@
+---
+# Per-user Basic Auth credentials for ace. bcrypt-hashed with cost 10.
+#
+# Format: one "username:$2y$..." (or "$2a$", "$2b$") string per list item.
+# ace re-reads the file every 10s, so adding a user only needs a
+# playbook re-run — no container restart.
+#
+# Generate a new hash locally:
+#   htpasswd -nbBC 10 <user> '<password>'
+#
+# NOTE: this file holds bcrypt hashes only (not plaintext), but treat it
+# as sensitive — leaking a hash lets an attacker brute-force offline.
+# Move to ansible-vault once the team grows beyond a single user.
+ace_basic_auth_users:
+  - "julien:$2a$10$4douclkRmoCK494DxyPdEek6uhX2J9tLyHUpU/m.4gvF3SLH4Y1/a"

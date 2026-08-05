@@ -31,3 +31,18 @@ ace_hosts:
       # default; SIP on 5093 to mirror what we use locally.
       ace_http_addr: "0.0.0.0:8086"
       ace_sip_port: 5093
+
+      # --- Optional HTTP Basic Auth (LAN-only deployments) ---
+      # Flip to true to require Basic Auth on every request. Users are
+      # bcrypt-hashed and rendered into an htpasswd file that ace re-reads
+      # every 10s, so adding a user only needs a re-run of the playbook —
+      # no container restart. Put ace_basic_auth_users in an ansible-vault
+      # encrypted group_vars file (do NOT check plaintext hashes into the
+      # inventory).
+      #
+      # Generate a bcrypt hash locally:
+      #   htpasswd -nbBC 10 julien 'my-password'
+      # then paste the whole "user:$2y$..." line into ace_basic_auth_users.
+      ace_auth_enabled: true
+      # ace_basic_auth_users lives in group_vars/ace_hosts.yml
+      ace_basic_auth_users: []

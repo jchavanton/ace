@@ -36,6 +36,14 @@ type Config struct {
 	// RunsDir is where per-run output lands. The controller creates a
 	// timestamped subdir per run; results.json + captured WAVs go there.
 	RunsDir string
+
+	// BasicAuthHtpasswd, when non-empty, points at an htpasswd file
+	// (bcrypt entries only) enforced by the handler middleware. Empty
+	// disables auth entirely — matches the existing behavior for LAN
+	// deployments. On authenticated requests the middleware stamps the
+	// matched username onto the request context so downstream code
+	// (Runner.Start) can record who launched a run.
+	BasicAuthHtpasswd string
 }
 
 // FromFlags parses flags and validates the result. Exits with a clear
@@ -48,6 +56,7 @@ func FromFlags() *Config {
 	flag.StringVar(&c.PublicAddress, "public-address", "", "public-side IP for SIP Contact / Via (passed to voip_patrol --public-address)")
 	flag.StringVar(&c.ScenariosDir, "scenarios-dir", "./scenarios", "directory holding scenario XML files")
 	flag.StringVar(&c.RunsDir, "runs-dir", "./runs", "directory where per-run output lands")
+	flag.StringVar(&c.BasicAuthHtpasswd, "basic-auth-htpasswd", "", "path to htpasswd file (bcrypt); empty = no auth")
 	flag.Parse()
 
 	// Resolve to absolute paths so the gin handlers don't need to care
