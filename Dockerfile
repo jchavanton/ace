@@ -73,6 +73,8 @@ CMD ["/bin/sh", "-c", "exec /usr/local/bin/ace \
     -addr ${ACE_ADDR} \
     -voip-patrol-bin ${ACE_VOIP_PATROL_BIN} \
     -voip-patrol-port ${ACE_VOIP_PATROL_PORT:-5093} \
+    -rtp-port-start ${ACE_RTP_PORT_START:-4000} \
+    -rtp-port-end ${ACE_RTP_PORT_END:-14000} \
     -scenarios-dir ${ACE_SCENARIOS_DIR} \
     -runs-dir ${ACE_RUNS_DIR} \
     ${ACE_PUBLIC_ADDRESS:+-public-address ${ACE_PUBLIC_ADDRESS}} \

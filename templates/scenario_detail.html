@@ -8,8 +8,16 @@
   <h1 class="h3 mb-0">{{ .Scenario.Name }}</h1>
   <div>
     <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('save-form').requestSubmit()">Save</button>
-    <form method="post" action="/scenarios/{{ .Scenario.Name }}/run" class="d-inline">
-      <button type="submit" class="btn btn-primary" {{ if .Busy }}disabled{{ end }}>Run scenario</button>
+    <form method="post" action="/scenarios/{{ .Scenario.Name }}/run" class="row row-cols-lg-auto g-2 align-items-center d-inline-flex">
+      <div class="col-auto"><label class="col-form-label small text-muted">SIP</label></div>
+      <div class="col-auto"><input type="number" name="sip_port" value="{{ .DefaultSIPPort }}" min="1024" max="65535" class="form-control form-control-sm" style="width:6em"></div>
+      <div class="col-auto"><label class="col-form-label small text-muted">RTP</label></div>
+      <div class="col-auto"><input type="number" name="rtp_start" value="{{ .DefaultRTPStart }}" min="1024" max="65535" class="form-control form-control-sm" style="width:6em"></div>
+      <div class="col-auto"><span class="small text-muted">–</span></div>
+      <div class="col-auto"><input type="number" name="rtp_end" value="{{ .DefaultRTPEnd }}" min="1024" max="65535" class="form-control form-control-sm" style="width:6em"></div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-primary" {{ if .Busy }}disabled{{ end }}>Run scenario</button>
+      </div>
     </form>
     <form method="post" action="/scenarios/{{ .Scenario.Name }}/delete" class="d-inline" onsubmit="return confirm('Delete scenario {{ .Scenario.Name }}?');">
       <button type="submit" class="btn btn-outline-danger" {{ if .Busy }}disabled{{ end }}>Delete</button>

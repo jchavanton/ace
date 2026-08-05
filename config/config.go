@@ -20,10 +20,16 @@ type Config struct {
 	// controller will invoke. Required.
 	VoipPatrolBin string
 
-	// VoipPatrolPort is the local SIP port voip_patrol binds for each
-	// run. The same port is reused across runs since runs are serialized
-	// (one at a time) in v1.
+	// VoipPatrolPort is the default local SIP port voip_patrol binds for
+	// each run. Overridable per-run via the Run form. The same port is
+	// reused across runs since runs are serialized (one at a time) in v1.
 	VoipPatrolPort int
+
+	// RTPPortStart / RTPPortEnd are the default RTP port range passed to
+	// voip_patrol as --rtp-port / --rtp-port-end. Overridable per-run.
+	// voip_patrol allocates the actual pair(s) from within this range.
+	RTPPortStart int
+	RTPPortEnd   int
 
 	// PublicAddress is the public-side IP voip_patrol advertises in
 	// Contact / Via, set via --public-address. Required when ace runs
@@ -52,7 +58,9 @@ func FromFlags() *Config {
 	c := &Config{}
 	flag.StringVar(&c.Addr, "addr", "0.0.0.0:8086", "HTTP bind address")
 	flag.StringVar(&c.VoipPatrolBin, "voip-patrol-bin", "/usr/local/bin/voip_patrol", "path to voip_patrol binary")
-	flag.IntVar(&c.VoipPatrolPort, "voip-patrol-port", 5093, "local SIP port voip_patrol binds")
+	flag.IntVar(&c.VoipPatrolPort, "voip-patrol-port", 5093, "default local SIP port voip_patrol binds (per-run override in UI)")
+	flag.IntVar(&c.RTPPortStart, "rtp-port-start", 4000, "default RTP port range start (per-run override in UI)")
+	flag.IntVar(&c.RTPPortEnd, "rtp-port-end", 14000, "default RTP port range end (per-run override in UI)")
 	flag.StringVar(&c.PublicAddress, "public-address", "", "public-side IP for SIP Contact / Via (passed to voip_patrol --public-address)")
 	flag.StringVar(&c.ScenariosDir, "scenarios-dir", "./scenarios", "directory holding scenario XML files")
 	flag.StringVar(&c.RunsDir, "runs-dir", "./runs", "directory where per-run output lands")

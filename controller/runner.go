@@ -70,6 +70,15 @@ func (r *Runner) Stop(id, stoppedBy string) error {
 	return nil
 }
 
+// Ports is a per-run override of the SIP + RTP ports voip_patrol binds.
+// Zero fields fall back to the runner's config defaults, so a caller
+// that doesn't care can pass a zero Ports{}.
+type Ports struct {
+	SIP          int
+	RTPPortStart int
+	RTPPortEnd   int
+}
+
 // Start kicks off a scenario run and returns the freshly-created Run
 // record (status=running). The actual voip_patrol execution proceeds in
 // a background goroutine using a context that's independent of the
@@ -80,10 +89,13 @@ func (r *Runner) Stop(id, stoppedBy string) error {
 // header) or "" when auth is off. Persisted to run.json for audit;
 // the runner itself doesn't use it.
 //
+// ports overrides the SIP/RTP ports for this run only. Zero fields =
+// use the runner's config defaults.
+//
 // On error before exec (mutex busy, scenario dir missing, etc.) Start
 // returns an error and no Run; the goroutine itself never returns an
 // error — failures land in run.Status / run.Error inside run.json.
-func (r *Runner) Start(scenario *models.Scenario, startedBy string) (*models.Run, error) {
+func (r *Runner) Start(scenario *models.Scenario, startedBy string, ports Ports) (*models.Run, error) {
 	if !r.mu.TryLock() {
 		return nil, fmt.Errorf("another run is in progress")
 	}
@@ -94,6 +106,12 @@ func (r *Runner) Start(scenario *models.Scenario, startedBy string) (*models.Run
 		return nil, fmt.Errorf("new run: %w", err)
 	}
 	run.StartedBy = startedBy
+	// Record the effective ports (after fallback) on the run itself so
+	// the detail page can show what voip_patrol actually bound and old
+	// runs remain distinguishable after a config change.
+	run.SIPPort = firstNonZero(ports.SIP, r.Cfg.VoipPatrolPort)
+	run.RTPPortStart = firstNonZero(ports.RTPPortStart, r.Cfg.RTPPortStart)
+	run.RTPPortEnd = firstNonZero(ports.RTPPortEnd, r.Cfg.RTPPortEnd)
 	// Persist the running-state record so the UI can show it
 	// immediately after the redirect.
 	if err := run.Save(r.Cfg.RunsDir); err != nil {
@@ -106,6 +124,13 @@ func (r *Runner) Start(scenario *models.Scenario, startedBy string) (*models.Run
 		r.execute(run, scenario)
 	}()
 	return run, nil
+}
+
+func firstNonZero(a, b int) int {
+	if a != 0 {
+		return a
+	}
+	return b
 }
 
 // execute is the blocking half: spawns voip_patrol, waits for exit,
@@ -136,7 +161,9 @@ func (r *Runner) execute(run *models.Run, scenario *models.Scenario) {
 
 	runDir := run.Dir(r.Cfg.RunsDir)
 	args := []string{
-		"--port", fmt.Sprintf("%d", r.Cfg.VoipPatrolPort),
+		"--port", fmt.Sprintf("%d", run.SIPPort),
+		"--rtp-port", fmt.Sprintf("%d", run.RTPPortStart),
+		"--rtp-port-end", fmt.Sprintf("%d", run.RTPPortEnd),
 		"-c", scenario.Path,
 		"--record-dir", runDir,
 	}

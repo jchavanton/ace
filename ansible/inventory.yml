@@ -28,9 +28,15 @@ ace_hosts:
       ace_install_dir: /opt/aizan/ace
 
       # Bind addresses for the web UI and SIP. Web UI on 8086 by
-      # default; SIP on 5093 to mirror what we use locally.
+      # default; SIP on 5093 to mirror what we use locally. The RTP
+      # range is voip_patrol's default (4000-14000); narrow it here if
+      # a specific range is required by the SBC / firewall.
+      # All three are overridable per-run from the UI — these are just
+      # the defaults the form pre-fills.
       ace_http_addr: "0.0.0.0:8086"
       ace_sip_port: 5093
+      ace_rtp_port_start: 4000
+      ace_rtp_port_end: 14000
 
       # --- Optional HTTP Basic Auth (LAN-only deployments) ---
       # Flip to true to require Basic Auth on every request. Users are

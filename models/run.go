@@ -22,6 +22,11 @@ type Run struct {
 	Scenario     string    `json:"scenario"`      // scenario name
 	StartedAt    time.Time `json:"started_at"`
 	StartedBy    string    `json:"started_by,omitempty"` // authenticated email from oauth2-proxy; empty when auth is off
+	// Ports actually used for this run. Zero on older runs recorded
+	// before this field existed — treat as "config default at the time".
+	SIPPort      int       `json:"sip_port,omitempty"`
+	RTPPortStart int       `json:"rtp_port_start,omitempty"`
+	RTPPortEnd   int       `json:"rtp_port_end,omitempty"`
 	FinishedAt   time.Time `json:"finished_at,omitempty"`
 	Status       string    `json:"status"`        // running | done | error
 	ExitCode     int       `json:"exit_code"`

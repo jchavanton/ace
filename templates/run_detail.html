@@ -28,6 +28,9 @@
     {{ else if eq .Status "error" }}<span class="badge bg-danger">error</span>
     {{ else if eq .Status "stopped" }}<span class="badge bg-warning text-dark">stopped</span>
     {{ else }}<span class="badge bg-secondary">{{ .Status }}</span>{{ end }}
+  {{ if .SIPPort }} · SIP {{ .SIPPort }}{{ end }}
+  {{ if .RTPPortStart }} · RTP {{ .RTPPortStart }}–{{ .RTPPortEnd }}{{ end }}
+  {{ if .StartedBy }} · by {{ .StartedBy }}{{ end }}
 </p>
 
 {{ if .Error }}<div class="alert alert-danger small">{{ .Error }}</div>{{ end }}

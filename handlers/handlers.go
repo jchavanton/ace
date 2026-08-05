@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"encoding/xml"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -87,6 +88,9 @@ func (s *Server) handleScenarioDetail(c *gin.Context) {
 		"Scenario":        scn,
 		"XML":             xml,
 		"Busy":            s.Runner.IsBusy(),
+		"DefaultSIPPort":  s.Cfg.VoipPatrolPort,
+		"DefaultRTPStart": s.Cfg.RTPPortStart,
+		"DefaultRTPEnd":   s.Cfg.RTPPortEnd,
 	})
 }
 
@@ -109,7 +113,15 @@ func (s *Server) handleRun(c *gin.Context) {
 	if user == "" {
 		user = c.GetHeader("X-Forwarded-Email")
 	}
-	run, err := s.Runner.Start(scn, user)
+	// Port overrides from the Run form. Empty strings → 0 → runner
+	// falls back to config defaults. Invalid values → 400 with a
+	// specific message.
+	ports, err := parsePorts(c)
+	if err != nil {
+		c.String(http.StatusBadRequest, "%v", err)
+		return
+	}
+	run, err := s.Runner.Start(scn, user, ports)
 	if err != nil {
 		c.String(http.StatusConflict, "run failed to start: %v", err)
 		return
@@ -336,6 +348,44 @@ func (s *Server) handleRunDelete(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/runs")
+}
+
+// parsePorts reads the optional sip_port / rtp_start / rtp_end fields
+// from a Run form. Empty = 0 = "use config default" (runner does the
+// fallback). Non-empty values must parse and be inside the
+// unprivileged-port range; rtp_start must be <= rtp_end when both are
+// set. Callers turn a non-nil error into a 400.
+func parsePorts(c *gin.Context) (controller.Ports, error) {
+	var p controller.Ports
+	var err error
+	if p.SIP, err = parsePortField(c.PostForm("sip_port"), "sip_port"); err != nil {
+		return p, err
+	}
+	if p.RTPPortStart, err = parsePortField(c.PostForm("rtp_start"), "rtp_start"); err != nil {
+		return p, err
+	}
+	if p.RTPPortEnd, err = parsePortField(c.PostForm("rtp_end"), "rtp_end"); err != nil {
+		return p, err
+	}
+	if p.RTPPortStart != 0 && p.RTPPortEnd != 0 && p.RTPPortStart > p.RTPPortEnd {
+		return p, fmt.Errorf("rtp_start (%d) must be <= rtp_end (%d)", p.RTPPortStart, p.RTPPortEnd)
+	}
+	return p, nil
+}
+
+func parsePortField(raw, name string) (int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s: not a number: %q", name, raw)
+	}
+	if n < 1024 || n > 65535 {
+		return 0, fmt.Errorf("%s: %d out of range (1024-65535)", name, n)
+	}
+	return n, nil
 }
 
 // sanitizeRunID accepts the shape produced by models.NewRun:
