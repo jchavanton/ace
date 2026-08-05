@@ -6,7 +6,12 @@
   <li class="breadcrumb-item active">{{ .ID }}</li>
 </ol></nav>
 
-<h1 class="h3">{{ .Scenario }}</h1>
+<div class="d-flex justify-content-between align-items-center">
+  <h1 class="h3 mb-0">{{ .Scenario }}</h1>
+  <form method="post" action="/runs/{{ .ID }}/delete" class="d-inline" onsubmit="return confirm('Delete run {{ .ID }}?');">
+    <button type="submit" class="btn btn-sm btn-outline-danger" {{ if eq .Status "running" }}disabled{{ end }}>Delete run</button>
+  </form>
+</div>
 <p class="small text-muted">
   <code>{{ .ID }}</code> ·
   {{ .StartedAt.Format "2006-01-02 15:04:05" }}

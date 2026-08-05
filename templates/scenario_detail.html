@@ -11,6 +11,9 @@
     <form method="post" action="/scenarios/{{ .Scenario.Name }}/run" class="d-inline">
       <button type="submit" class="btn btn-primary" {{ if .Busy }}disabled{{ end }}>Run scenario</button>
     </form>
+    <form method="post" action="/scenarios/{{ .Scenario.Name }}/delete" class="d-inline" onsubmit="return confirm('Delete scenario {{ .Scenario.Name }}?');">
+      <button type="submit" class="btn btn-outline-danger" {{ if .Busy }}disabled{{ end }}>Delete</button>
+    </form>
   </div>
 </div>
 

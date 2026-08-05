@@ -33,11 +33,13 @@ func (s *Server) Register(r *gin.Engine) {
 	r.POST("/scenarios", s.handleScenarioCreate)
 	r.GET("/scenarios/:name", s.handleScenarioDetail)
 	r.POST("/scenarios/:name", s.handleScenarioSave)
+	r.POST("/scenarios/:name/delete", s.handleScenarioDelete)
 	r.POST("/scenarios/:name/run", s.handleRun)
 	r.GET("/runs", s.handleRuns)
 	r.GET("/runs/:id", s.handleRunDetail)
 	r.GET("/runs/:id/log", s.handleRunLog)
 	r.GET("/runs/:id/wav/:file", s.handleRunWAV)
+	r.POST("/runs/:id/delete", s.handleRunDelete)
 }
 
 func (s *Server) handleIndex(c *gin.Context) {
@@ -259,6 +261,75 @@ func (s *Server) handleScenarioCreate(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/scenarios/"+name)
+}
+
+// handleScenarioDelete removes a scenario's XML file. Refuses while a
+// run is in progress so we don't yank the file out from under a runner
+// that may still be reading it.
+func (s *Server) handleScenarioDelete(c *gin.Context) {
+	name := sanitizeScenarioName(c.Param("name"))
+	if name == "" {
+		c.String(http.StatusBadRequest, "invalid name")
+		return
+	}
+	if s.Runner.IsBusy() {
+		c.String(http.StatusConflict, "runner busy; cannot delete scenario")
+		return
+	}
+	path := filepath.Join(s.Cfg.ScenariosDir, name+".xml")
+	if _, err := os.Stat(path); err != nil {
+		c.String(http.StatusNotFound, "scenario %q does not exist", name)
+		return
+	}
+	if err := os.Remove(path); err != nil {
+		c.String(http.StatusInternalServerError, "delete: %v", err)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/scenarios")
+}
+
+// handleRunDelete removes a run's directory (run.json, stdout.log,
+// results, WAVs). Refuses if the run is still marked "running" so we
+// don't yank output from under the runner goroutine.
+func (s *Server) handleRunDelete(c *gin.Context) {
+	id := sanitizeRunID(c.Param("id"))
+	if id == "" {
+		c.String(http.StatusBadRequest, "invalid run id")
+		return
+	}
+	run, err := models.LoadRun(s.Cfg.RunsDir, id)
+	if err != nil {
+		c.String(http.StatusNotFound, "run %q: %v", id, err)
+		return
+	}
+	if run.Status == "running" {
+		c.String(http.StatusConflict, "run %q is still running", id)
+		return
+	}
+	if err := os.RemoveAll(run.Dir(s.Cfg.RunsDir)); err != nil {
+		c.String(http.StatusInternalServerError, "delete: %v", err)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/runs")
+}
+
+// sanitizeRunID accepts the shape produced by models.NewRun:
+// "YYYYMMDD-HHMMSS-<scenario>", i.e. letters, digits, '_', and '-'.
+// Reject any '/' or '.' so a crafted id can't escape RunsDir into a
+// sibling path (delete uses RemoveAll — path escape here is serious).
+func sanitizeRunID(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" || len(s) > 128 {
+		return ""
+	}
+	for _, r := range s {
+		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '_' || r == '-'
+		if !ok {
+			return ""
+		}
+	}
+	return s
 }
 
 // sanitizeScenarioName accepts letters, digits, '_', and '-' only. Any
