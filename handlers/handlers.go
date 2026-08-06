@@ -35,7 +35,6 @@ func (s *Server) Register(r *gin.Engine) {
 	r.GET("/scenarios/:name", s.handleScenarioDetail)
 	r.POST("/scenarios/:name", s.handleScenarioSave)
 	r.POST("/scenarios/:name/delete", s.handleScenarioDelete)
-	r.POST("/scenarios/:name/ports", s.handleScenarioPortsSave)
 	r.POST("/scenarios/:name/run", s.handleRun)
 	r.POST("/runs/:id/stop", s.handleRunStop)
 	r.GET("/runs", s.handleRuns)
@@ -258,9 +257,15 @@ func (s *Server) handleRunWAV(c *gin.Context) {
 	c.File(filepath.Join(run.Dir(s.Cfg.RunsDir), file))
 }
 
-// handleScenarioSave overwrites an existing scenario's XML on disk.
-// Validates the submitted body parses as XML before writing; rejects
-// otherwise so we don't replace a working scenario with garbage.
+// handleScenarioSave overwrites an existing scenario's XML on disk
+// and, as part of the same submit, persists (or clears) the sidecar
+// ports file. The scenario detail page submits xml + sip_port +
+// rtp_start + rtp_end in one form; treating both as one atomic Save
+// matches how users think about "save my edits."
+//
+// XML is required and must parse; ports are optional. If all three
+// port fields are blank, the sidecar is removed — same as the previous
+// dedicated /ports endpoint.
 func (s *Server) handleScenarioSave(c *gin.Context) {
 	name := sanitizeScenarioName(c.Param("name"))
 	if name == "" {
@@ -276,6 +281,14 @@ func (s *Server) handleScenarioSave(c *gin.Context) {
 		c.String(http.StatusBadRequest, "XML parse error: %v", err)
 		return
 	}
+	// Ports are optional on this route (a create flow doesn't fill
+	// them in). parsePorts validates any non-empty value; the
+	// per-run overlap check happens in the runner, not here.
+	ports, err := parsePorts(c)
+	if err != nil {
+		c.String(http.StatusBadRequest, "%v", err)
+		return
+	}
 	// Only allow saving over existing scenarios via this route. Creation
 	// goes through POST /scenarios.
 	path := filepath.Join(s.Cfg.ScenariosDir, name+".xml")
@@ -286,6 +299,22 @@ func (s *Server) handleScenarioSave(c *gin.Context) {
 	if err := os.WriteFile(path, []byte(xml), 0o644); err != nil {
 		c.String(http.StatusInternalServerError, "write: %v", err)
 		return
+	}
+	sp := models.ScenarioPorts{
+		SIP:          ports.SIP,
+		RTPPortStart: ports.RTPPortStart,
+		RTPPortEnd:   ports.RTPPortEnd,
+	}
+	if sp == (models.ScenarioPorts{}) {
+		if err := models.DeleteScenarioPorts(s.Cfg.ScenariosDir, name); err != nil {
+			c.String(http.StatusInternalServerError, "delete ports: %v", err)
+			return
+		}
+	} else {
+		if err := models.SaveScenarioPorts(s.Cfg.ScenariosDir, name, sp); err != nil {
+			c.String(http.StatusInternalServerError, "save ports: %v", err)
+			return
+		}
 	}
 	c.Redirect(http.StatusSeeOther, "/scenarios/"+name)
 }
@@ -316,49 +345,6 @@ func (s *Server) handleScenarioCreate(c *gin.Context) {
 	if err := os.WriteFile(path, []byte(xml), 0o644); err != nil {
 		c.String(http.StatusInternalServerError, "write: %v", err)
 		return
-	}
-	c.Redirect(http.StatusSeeOther, "/scenarios/"+name)
-}
-
-// handleScenarioPortsSave persists the per-scenario default SIP + RTP
-// ports into a sidecar `<name>.ports.json` file next to the XML.
-// Empty field(s) mean "clear that value" — writes a partial file.
-// Fully empty submission removes the sidecar entirely (equivalent to
-// "revert to runner defaults").
-func (s *Server) handleScenarioPortsSave(c *gin.Context) {
-	name := sanitizeScenarioName(c.Param("name"))
-	if name == "" {
-		c.String(http.StatusBadRequest, "invalid name")
-		return
-	}
-	// Verify the scenario exists — no point saving ports for a
-	// scenario that doesn't; also 404 vs. creating an orphan sidecar.
-	if _, err := os.Stat(filepath.Join(s.Cfg.ScenariosDir, name+".xml")); err != nil {
-		c.String(http.StatusNotFound, "scenario %q does not exist", name)
-		return
-	}
-	ports, err := parsePorts(c)
-	if err != nil {
-		c.String(http.StatusBadRequest, "%v", err)
-		return
-	}
-	sp := models.ScenarioPorts{
-		SIP:          ports.SIP,
-		RTPPortStart: ports.RTPPortStart,
-		RTPPortEnd:   ports.RTPPortEnd,
-	}
-	if sp == (models.ScenarioPorts{}) {
-		// All fields blank — treat as "revert to runner defaults" by
-		// removing the sidecar. Nice symmetry with a fresh scenario.
-		if err := models.DeleteScenarioPorts(s.Cfg.ScenariosDir, name); err != nil {
-			c.String(http.StatusInternalServerError, "delete ports: %v", err)
-			return
-		}
-	} else {
-		if err := models.SaveScenarioPorts(s.Cfg.ScenariosDir, name, sp); err != nil {
-			c.String(http.StatusInternalServerError, "save ports: %v", err)
-			return
-		}
 	}
 	c.Redirect(http.StatusSeeOther, "/scenarios/"+name)
 }
