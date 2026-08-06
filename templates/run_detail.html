@@ -66,7 +66,7 @@
 <table class="table table-sm align-middle">
   <thead><tr>
     <th>#</th><th>Result</th><th>Cause</th><th>Reason</th><th class="text-end">Dur</th>
-    <th class="text-end">100ms</th><th class="text-end">200ms</th>
+    <th class="text-end">100</th><th class="text-end">180</th><th class="text-end">200</th>
     <th class="text-end">MOS Rx/Tx</th><th>Call-ID</th>
   </tr></thead>
   <tbody>
@@ -80,8 +80,9 @@
       <td>{{ $c.CauseCode }}</td>
       <td class="small">{{ $c.Reason }}</td>
       <td class="text-end small">{{ $c.Duration }}s</td>
-      <td class="text-end small text-muted">{{ $c.SIPLatency.Invite100Ms }}</td>
-      <td class="text-end small text-muted">{{ $c.SIPLatency.Invite200Ms }}</td>
+      <td class="text-end small text-muted">{{ if $c.SIPLatency.Invite100Ms }}{{ $c.SIPLatency.Invite100Ms }} ms{{ end }}</td>
+      <td class="text-end small text-muted">{{ if $c.SIPLatency.Invite18xMs }}{{ $c.SIPLatency.Invite18xMs }} ms{{ end }}</td>
+      <td class="text-end small text-muted">{{ if $c.SIPLatency.Invite200Ms }}{{ $c.SIPLatency.Invite200Ms }} ms{{ end }}</td>
       <td class="text-end small text-muted">
         {{ range $c.RTPStats }}{{ printf "%.2f / %.2f" .Rx.MosLQ .Tx.MosLQ }}{{ end }}
       </td>
