@@ -28,11 +28,16 @@
 {{ if .Scenarios }}
 <div class="table-responsive">
 <table class="table table-sm align-middle">
-  <thead><tr><th>Name</th><th class="text-end">Size</th><th>Modified</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>Ports</th><th class="text-end">Size</th><th>Modified</th><th></th></tr></thead>
   <tbody>
   {{ range .Scenarios }}
     <tr>
       <td><a href="/scenarios/{{ .Name }}">{{ .Name }}</a></td>
+      <td class="small">
+        {{ if .Ports.SIP }}SIP <strong>{{ .Ports.SIP }}</strong>{{ else }}<span class="text-muted">SIP {{ $.DefaultSIPPort }}</span>{{ end }}
+        <span class="text-muted"> · </span>
+        {{ if .Ports.RTPPortStart }}RTP <strong>{{ .Ports.RTPPortStart }}–{{ .Ports.RTPPortEnd }}</strong>{{ else }}<span class="text-muted">RTP {{ $.DefaultRTPStart }}–{{ $.DefaultRTPEnd }}</span>{{ end }}
+      </td>
       <td class="text-end small text-muted">{{ .SizeBytes }} B</td>
       <td class="small text-muted">{{ .ModTime.Format "2006-01-02 15:04:05" }}</td>
       <td class="text-end">
