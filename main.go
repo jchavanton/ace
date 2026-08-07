@@ -35,6 +35,14 @@ func main() {
 		Cfg:    cfg,
 		Runner: &controller.Runner{Cfg: cfg},
 	}
+	// Any run left in status=running from a previous process is a lie
+	// after this restart — mark them errored before we serve, so the UI
+	// (and the Stop button in particular) doesn't act on ghost runs.
+	if n, err := srv.Runner.RecoverOrphanedRuns(); err != nil {
+		log.Printf("ace: recover orphaned runs: %v", err)
+	} else if n > 0 {
+		log.Printf("ace: marked %d orphaned run(s) as errored", n)
+	}
 	srv.Register(r)
 
 	log.Printf("ace listening on http://%s (voip_patrol=%s scenarios=%s runs=%s)",

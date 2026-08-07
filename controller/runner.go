@@ -173,6 +173,50 @@ func (r *Runner) Stop(id, stoppedBy string) error {
 	return nil
 }
 
+// RecoverOrphanedRuns scans RunsDir at boot and marks every run whose
+// run.json still says status=running as "error" with an "orphaned by
+// controller restart" note. Called once at startup, before HTTP starts
+// serving, so the UI never sees a fake "running" from a prior instance
+// (real in-flight runs die with the process — no ACE reattach path).
+// Also parses any results.json the dead voip_patrol left behind so the
+// PASS/FAIL breakdown for completed calls is preserved, matching what
+// execute() does at normal exit.
+//
+// Errors on individual runs are logged and swallowed — one broken
+// run.json shouldn't block ACE startup.
+func (r *Runner) RecoverOrphanedRuns() (int, error) {
+	entries, err := os.ReadDir(r.Cfg.RunsDir)
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().UTC()
+	recovered := 0
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		run, err := models.LoadRun(r.Cfg.RunsDir, e.Name())
+		if err != nil {
+			continue
+		}
+		if run.Status != "running" {
+			continue
+		}
+		run.Status = "error"
+		run.Error = "orphaned by controller restart"
+		run.FinishedAt = now
+		if calls, _ := loadVoipPatrolResults(filepath.Join(run.Dir(r.Cfg.RunsDir), "results.json")); len(calls) > 0 {
+			run.Calls = calls
+			run.Aggregate = aggregate(calls)
+		}
+		if err := run.Save(r.Cfg.RunsDir); err != nil {
+			continue
+		}
+		recovered++
+	}
+	return recovered, nil
+}
+
 // Ports is a per-run override of the SIP + RTP ports voip_patrol binds
 // plus the public IP it advertises. Zero fields (empty string for
 // PublicAddress) fall back to the runner's config defaults, so a caller
