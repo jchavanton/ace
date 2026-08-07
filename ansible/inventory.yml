@@ -6,6 +6,8 @@
 #
 # Hostnames come from ~/.ssh/config; no ansible_host needed.
 
+# LAN deployments: source-build voip_patrol from a sibling checkout,
+# install to /opt/aizan/ace, root-owned. HTTP Basic Auth enabled.
 ace_hosts:
    hosts:
       sbc-ace-client1:
@@ -51,4 +53,40 @@ ace_hosts:
       # then paste the whole "user:$2y$..." line into ace_basic_auth_users.
       ace_auth_enabled: true
       # ace_basic_auth_users lives in group_vars/ace_hosts.yml
+
+# GCP-hosted ACE (single VM, docker + caddy + authelia already installed
+# by install-ace.sh). Ansible re-provisions ACE only; caddy + authelia
+# stay untouched. The Dockerfile pulls voip_patrol as a prebuilt image,
+# so no sibling voip_patrol/ checkout is shipped. Auth is fronted by
+# authelia+caddy on the same host, so ACE's own basic-auth is off.
+ace_gcp_hosts:
+   hosts:
+      ace-loadtest-01:
+         # Detected once at deploy time by the playbook via the GCP
+         # metadata service. Leave empty here so the auto-detection
+         # runs; override to pin a specific value.
+         ace_public_address: ""
+         # Comma-separated list of private IPs to surface in ACE's UI
+         # Network dropdown. Auto-filled from GCP metadata; override to pin.
+         ace_local_ips: ""
+
+   vars:
+      # ~/.ssh/config alias resolves this. Matches other netic-* GCP hosts.
+      ansible_user: ext_jchavanton_gmail_com
+      # Prebuilt voip_patrol image — no sibling checkout needed, and the
+      # docker-compose.yml's additional_contexts is patched out.
+      ace_use_prebuilt_voip_patrol: true
+      ace_source_dir: "{{ lookup('env','HOME') }}/git/ace"
+      # install-ace.sh put the stack under $HOME/ace; keep that so the
+      # switch to ansible doesn't require a compose migration.
+      ace_install_dir: "/home/{{ ansible_user }}/ace"
+      # Cloud tag used by the role to pick metadata-service IP detection.
+      ace_cloud: gcp
+
+      ace_http_addr: "0.0.0.0:8086"
+      ace_sip_port: 5093
+      ace_rtp_port_start: 4000
+      ace_rtp_port_end: 14000
+
+      ace_auth_enabled: false
       ace_basic_auth_users: []

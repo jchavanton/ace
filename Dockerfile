@@ -78,4 +78,5 @@ CMD ["/bin/sh", "-c", "exec /usr/local/bin/ace \
     -scenarios-dir ${ACE_SCENARIOS_DIR} \
     -runs-dir ${ACE_RUNS_DIR} \
     ${ACE_PUBLIC_ADDRESS:+-public-address ${ACE_PUBLIC_ADDRESS}} \
+    ${ACE_LOCAL_IPS:+-local-ips ${ACE_LOCAL_IPS}} \
     ${ACE_BASIC_AUTH_HTPASSWD:+-basic-auth-htpasswd ${ACE_BASIC_AUTH_HTPASSWD}}"]

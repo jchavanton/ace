@@ -7,8 +7,14 @@ package config
 import (
 	"flag"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
+	"time"
 )
 
 // Config is the resolved runtime configuration.
@@ -59,6 +65,19 @@ type Config struct {
 	// matched username onto the request context so downstream code
 	// (Runner.Start) can record who launched a run.
 	BasicAuthHtpasswd string
+
+	// LocalIPs holds the host's non-loopback IPv4 addresses, enumerated
+	// once at startup. Shown in the scenario-detail UI as selectable
+	// options for the per-scenario voip_patrol --ip-addr override.
+	LocalIPs []string
+
+	// DetectedPublicIP is the host's public IPv4 as reported by an
+	// external service (ifconfig.me), fetched once at startup. Empty on
+	// lookup failure — the UI just hides the "public" option in that
+	// case. This is a UI convenience; the actual --ip-addr sent to
+	// voip_patrol is whatever the scenario has selected (or the global
+	// PublicAddress default).
+	DetectedPublicIP string
 }
 
 // FromFlags parses flags and validates the result. Exits with a clear
@@ -70,7 +89,9 @@ func FromFlags() *Config {
 	flag.IntVar(&c.VoipPatrolPort, "voip-patrol-port", 5093, "default local SIP port voip_patrol binds (per-run override in UI)")
 	flag.IntVar(&c.RTPPortStart, "rtp-port-start", 4000, "default RTP port range start (per-run override in UI)")
 	flag.IntVar(&c.RTPPortEnd, "rtp-port-end", 14000, "default RTP port range end (per-run override in UI)")
-	flag.StringVar(&c.PublicAddress, "public-address", "", "public-side IP for SIP Contact / Via (passed to voip_patrol --public-address)")
+	flag.StringVar(&c.PublicAddress, "public-address", "", "public-side IP for SIP Contact / Via (passed to voip_patrol --ip-addr as the global default)")
+	var localIPsRaw string
+	flag.StringVar(&localIPsRaw, "local-ips", "", "comma-separated list of private IPs to surface in the UI Network dropdown; overrides in-container interface enumeration (needed on cloud VMs where the container's veth isn't the address to advertise)")
 	flag.StringVar(&c.ScenariosDir, "scenarios-dir", "./scenarios", "directory holding scenario XML files")
 	flag.StringVar(&c.RunsDir, "runs-dir", "./runs", "directory where per-run output lands")
 	flag.StringVar(&c.VoiceRefDir, "voice-ref-dir", "/voice_ref_files", "source dir for voip_patrol reference WAVs; symlinked into each run dir as 'voice_ref_files'. Empty disables.")
@@ -97,5 +118,106 @@ func FromFlags() *Config {
 		}
 	}
 
+	// -local-ips wins over interface enumeration — on cloud VMs the
+	// container's veth is 172.x, but the operator wants to advertise the
+	// VM's private address (10.x on GCP). Ansible sets ACE_LOCAL_IPS
+	// from the metadata service; docker translates that to -local-ips.
+	if localIPsRaw = strings.TrimSpace(localIPsRaw); localIPsRaw != "" {
+		for _, s := range strings.Split(localIPsRaw, ",") {
+			s = strings.TrimSpace(s)
+			if s != "" && net.ParseIP(s) != nil {
+				c.LocalIPs = append(c.LocalIPs, s)
+			}
+		}
+	} else {
+		c.LocalIPs = detectLocalIPs()
+	}
+	c.DetectedPublicIP = detectPublicIP()
+	// PublicAddress from -public-address wins over the ifconfig.me
+	// probe as the "detected public" the UI shows. Ansible pins it
+	// from GCP metadata on cloud deploys; the probe stays as a
+	// last-resort fallback for hand-launched local stacks.
+	if c.DetectedPublicIP == "" && c.PublicAddress != "" && net.ParseIP(c.PublicAddress) != nil {
+		c.DetectedPublicIP = c.PublicAddress
+	}
+
 	return c
+}
+
+// detectLocalIPs returns non-loopback IPv4 addresses assigned to the
+// host's interfaces, sorted for stable UI ordering. Errors from
+// net.Interfaces / interface.Addrs are swallowed — a machine with no
+// enumerable interfaces just gets an empty list and the UI shows only
+// the public option (or nothing).
+func detectLocalIPs() []string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	var out []string
+	for _, ifc := range ifaces {
+		if ifc.Flags&net.FlagUp == 0 || ifc.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := ifc.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			var ip net.IP
+			switch v := a.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			ip4 := ip.To4()
+			if ip4 == nil {
+				continue
+			}
+			s := ip4.String()
+			if _, ok := seen[s]; ok {
+				continue
+			}
+			seen[s] = struct{}{}
+			out = append(out, s)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// detectPublicIP fetches the host's public IPv4 from ifconfig.me. A
+// short timeout keeps startup snappy on hosts with no outbound
+// connectivity; any error just returns "". Called once at startup —
+// this is a UI hint, not authoritative, so a stale value between
+// restarts is acceptable.
+func detectPublicIP() string {
+	client := &http.Client{Timeout: 3 * time.Second}
+	req, err := http.NewRequest("GET", "https://ifconfig.me/ip", nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("User-Agent", "curl/8")
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64))
+	if err != nil {
+		return ""
+	}
+	s := strings.TrimSpace(string(body))
+	if net.ParseIP(s) == nil {
+		return ""
+	}
+	return s
 }

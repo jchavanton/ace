@@ -45,9 +45,10 @@ type Scenario struct {
 // scenario XML. Zero fields = unset, so callers can treat a missing
 // file as an empty struct.
 type ScenarioPorts struct {
-	SIP          int `json:"sip,omitempty"`
-	RTPPortStart int `json:"rtp_port_start,omitempty"`
-	RTPPortEnd   int `json:"rtp_port_end,omitempty"`
+	SIP           int    `json:"sip,omitempty"`
+	RTPPortStart  int    `json:"rtp_port_start,omitempty"`
+	RTPPortEnd    int    `json:"rtp_port_end,omitempty"`
+	PublicAddress string `json:"public_address,omitempty"`
 }
 
 // PortsPath returns the absolute path to the scenario's sidecar

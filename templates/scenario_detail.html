@@ -43,6 +43,31 @@
 </div>
 {{ end }}
 
+<!-- Network: pick which IP voip_patrol advertises in SIP Contact / Via
+     and RTP (single --ip-addr flag covers both). Empty selection = no
+     --ip-addr passed (voip_patrol picks its own bind address). Options
+     are the host's detected local IPs plus the detected public IP; the
+     currently-saved value is always present in the list even if it's
+     none of the above (e.g. hand-edited sidecar). -->
+<fieldset class="border rounded p-2 mb-3">
+  <legend class="float-none w-auto px-2 small text-muted mb-0">Network — advertised IP (SIP + RTP)</legend>
+  <div class="row g-2 align-items-center">
+    <div class="col-auto">
+      <select form="scenario-form" name="public_address" class="form-select form-select-sm" style="width:auto">
+        <option value=""{{ if eq .SelectedPublicIP "" }} selected{{ end }}>— none (voip_patrol default) —</option>
+        {{ range .PublicIPOptions }}
+        <option value="{{ . }}"{{ if eq . $.SelectedPublicIP }} selected{{ end }}>{{ . }}{{ if eq . $.DetectedPublicIP }} (public){{ else }} (private){{ end }}</option>
+        {{ end }}
+      </select>
+    </div>
+    <div class="col-auto small text-muted">
+      Detected:
+      {{ if .DetectedPublicIP }}public <code>{{ .DetectedPublicIP }}</code>{{ else }}public <em>unknown</em>{{ end }}
+      · private {{ if .LocalIPs }}{{ range $i, $ip := .LocalIPs }}{{ if $i }}, {{ end }}<code>{{ $ip }}</code>{{ end }}{{ else }}<em>none</em>{{ end }}
+    </div>
+  </div>
+</fieldset>
+
   <textarea name="xml" id="xml-editor" class="form-control" style="font-family:monospace; min-height:60vh;">{{ .XML }}</textarea>
 </form>
 

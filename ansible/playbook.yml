@@ -10,8 +10,10 @@
 #
 # Per-host overrides go in the inventory (see ace_public_address).
 
-- hosts: ace_hosts
-  become: true
+- hosts: ace_hosts:ace_gcp_hosts
+  # GCP hosts run rootless-ish (compose invoked with sudo), LAN hosts run
+  # fully as root. become is a per-task decision inside the role.
+  become: false
   serial: 1   # one host at a time so a rollout never recreates all at once
   roles:
     - ace

@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -106,6 +107,34 @@ func (s *Server) handleScenarioDetail(c *gin.Context) {
 	if scn.Ports.RTPPortEnd != 0 {
 		rtpEndDefault = scn.Ports.RTPPortEnd
 	}
+	// Effective public IP for the dropdown's initial selection: the
+	// scenario's saved value wins over the global default. Empty means
+	// "no --ip-addr passed" (voip_patrol picks its own).
+	selectedIP := scn.Ports.PublicAddress
+	if selectedIP == "" {
+		selectedIP = s.Cfg.PublicAddress
+	}
+	// Available IPs shown in the dropdown: detected locals + detected
+	// public, de-duped, plus the currently-selected value if it isn't
+	// in either list (e.g. an operator hand-edited the sidecar with a
+	// third-party address).
+	ipOptions := make([]string, 0, len(s.Cfg.LocalIPs)+2)
+	seen := map[string]struct{}{}
+	add := func(ip string) {
+		if ip == "" {
+			return
+		}
+		if _, ok := seen[ip]; ok {
+			return
+		}
+		seen[ip] = struct{}{}
+		ipOptions = append(ipOptions, ip)
+	}
+	for _, ip := range s.Cfg.LocalIPs {
+		add(ip)
+	}
+	add(s.Cfg.DetectedPublicIP)
+	add(selectedIP)
 	c.HTML(http.StatusOK, "layout", gin.H{
 		"Title":           scn.Name,
 		"Page":            "scenarios",
@@ -115,11 +144,15 @@ func (s *Server) handleScenarioDetail(c *gin.Context) {
 		// ScenarioRunning gates the Delete button — same scenario file
 		// being read by a live run shouldn't be removed. Run is now
 		// always enabled since users can pick different ports.
-		"ScenarioRunning": s.Runner.IsScenarioRunning(scn.Name),
-		"ActiveRuns":      s.Runner.ActiveRuns(),
-		"DefaultSIPPort":  sipDefault,
-		"DefaultRTPStart": rtpStartDefault,
-		"DefaultRTPEnd":   rtpEndDefault,
+		"ScenarioRunning":  s.Runner.IsScenarioRunning(scn.Name),
+		"ActiveRuns":       s.Runner.ActiveRuns(),
+		"DefaultSIPPort":   sipDefault,
+		"DefaultRTPStart":  rtpStartDefault,
+		"DefaultRTPEnd":    rtpEndDefault,
+		"PublicIPOptions":  ipOptions,
+		"SelectedPublicIP": selectedIP,
+		"LocalIPs":         s.Cfg.LocalIPs,
+		"DetectedPublicIP": s.Cfg.DetectedPublicIP,
 		// HasSavedPorts controls whether the "Reset saved ports" hint
 		// shows next to the Save button.
 		"HasSavedPorts": scn.Ports != (models.ScenarioPorts{}),
@@ -163,6 +196,9 @@ func (s *Server) handleRun(c *gin.Context) {
 	}
 	if ports.RTPPortEnd == 0 {
 		ports.RTPPortEnd = scn.Ports.RTPPortEnd
+	}
+	if ports.PublicAddress == "" {
+		ports.PublicAddress = scn.Ports.PublicAddress
 	}
 	run, err := s.Runner.Start(scn, user, ports)
 	if err != nil {
@@ -301,9 +337,10 @@ func (s *Server) handleScenarioSave(c *gin.Context) {
 		return
 	}
 	sp := models.ScenarioPorts{
-		SIP:          ports.SIP,
-		RTPPortStart: ports.RTPPortStart,
-		RTPPortEnd:   ports.RTPPortEnd,
+		SIP:           ports.SIP,
+		RTPPortStart:  ports.RTPPortStart,
+		RTPPortEnd:    ports.RTPPortEnd,
+		PublicAddress: ports.PublicAddress,
 	}
 	if sp == (models.ScenarioPorts{}) {
 		if err := models.DeleteScenarioPorts(s.Cfg.ScenariosDir, name); err != nil {
@@ -427,11 +464,13 @@ func (s *Server) handleRunDelete(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/runs")
 }
 
-// parsePorts reads the optional sip_port / rtp_start / rtp_end fields
-// from a Run form. Empty = 0 = "use config default" (runner does the
-// fallback). Non-empty values must parse and be inside the
-// unprivileged-port range; rtp_start must be <= rtp_end when both are
-// set. Callers turn a non-nil error into a 400.
+// parsePorts reads the optional sip_port / rtp_start / rtp_end /
+// public_address fields from a Run form. Empty port = 0 = "use config
+// default" (runner does the fallback). Empty public_address = "use
+// scenario-saved or global default". Non-empty port values must parse
+// and be inside the unprivileged-port range; rtp_start must be <=
+// rtp_end when both are set. public_address must parse as an IP.
+// Callers turn a non-nil error into a 400.
 func parsePorts(c *gin.Context) (controller.Ports, error) {
 	var p controller.Ports
 	var err error
@@ -446,6 +485,12 @@ func parsePorts(c *gin.Context) (controller.Ports, error) {
 	}
 	if p.RTPPortStart != 0 && p.RTPPortEnd != 0 && p.RTPPortStart > p.RTPPortEnd {
 		return p, fmt.Errorf("rtp_start (%d) must be <= rtp_end (%d)", p.RTPPortStart, p.RTPPortEnd)
+	}
+	if pa := strings.TrimSpace(c.PostForm("public_address")); pa != "" {
+		if net.ParseIP(pa) == nil {
+			return p, fmt.Errorf("public_address: not a valid IP: %q", pa)
+		}
+		p.PublicAddress = pa
 	}
 	return p, nil
 }

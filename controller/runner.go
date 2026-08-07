@@ -173,13 +173,15 @@ func (r *Runner) Stop(id, stoppedBy string) error {
 	return nil
 }
 
-// Ports is a per-run override of the SIP + RTP ports voip_patrol binds.
-// Zero fields fall back to the runner's config defaults, so a caller
+// Ports is a per-run override of the SIP + RTP ports voip_patrol binds
+// plus the public IP it advertises. Zero fields (empty string for
+// PublicAddress) fall back to the runner's config defaults, so a caller
 // that doesn't care can pass a zero Ports{}.
 type Ports struct {
-	SIP          int
-	RTPPortStart int
-	RTPPortEnd   int
+	SIP           int
+	RTPPortStart  int
+	RTPPortEnd    int
+	PublicAddress string
 }
 
 // Start kicks off a scenario run and returns the freshly-created Run
@@ -204,6 +206,10 @@ func (r *Runner) Start(scenario *models.Scenario, startedBy string, ports Ports)
 	sip := firstNonZero(ports.SIP, r.Cfg.VoipPatrolPort)
 	rtpStart := firstNonZero(ports.RTPPortStart, r.Cfg.RTPPortStart)
 	rtpEnd := firstNonZero(ports.RTPPortEnd, r.Cfg.RTPPortEnd)
+	publicAddr := ports.PublicAddress
+	if publicAddr == "" {
+		publicAddr = r.Cfg.PublicAddress
+	}
 
 	// Create the context before taking activeMu so we can register its
 	// cancel with the activeRun record atomically. Same 10-minute
@@ -233,6 +239,7 @@ func (r *Runner) Start(scenario *models.Scenario, startedBy string, ports Ports)
 	run.SIPPort = sip
 	run.RTPPortStart = rtpStart
 	run.RTPPortEnd = rtpEnd
+	run.PublicAddress = publicAddr
 
 	if r.active == nil {
 		r.active = make(map[string]*activeRun)
@@ -315,8 +322,8 @@ func (r *Runner) execute(ctx context.Context, cancel context.CancelFunc, run *mo
 		"-c", scenario.Path,
 		"--record-dir", runDir,
 	}
-	if r.Cfg.PublicAddress != "" {
-		args = append(args, "--public-address", r.Cfg.PublicAddress)
+	if run.PublicAddress != "" {
+		args = append(args, "--ip-addr", run.PublicAddress)
 	}
 
 	// voip_patrol writes results.json to cwd; recordings go to --record-dir.

@@ -1,7 +1,17 @@
 ---
 # ace role: install docker (if missing), ship source, build & run.
+#
+# Two deploy shapes today:
+#   - LAN     (ace_hosts):    build voip_patrol from a sibling checkout,
+#                             install to /opt/aizan/ace, root-owned.
+#   - GCP     (ace_gcp_hosts): use prebuilt jchavanton/voip_patrol image,
+#                             install to $HOME/ace under the login user,
+#                             sudo for docker/apt only. Auth is fronted by
+#                             caddy+authelia on the same host (not managed
+#                             here); leave ACE's own basic-auth off.
 
 - name: Install docker prerequisites
+  become: true
   ansible.builtin.apt:
     name:
       - ca-certificates
@@ -11,14 +21,59 @@
     update_cache: true
   when: ansible_os_family == "Debian"
 
-# On a private LAN deployment (the only target shape today) we leave
-# ACE_PUBLIC_ADDRESS empty — PJSIP advertises whatever the host's NIC
-# bound to, which is reachable from the rest of the LAN. Set
-# ace_public_address in the inventory if you ever need to override
-# (e.g. a NATed deploy that needs to advertise a specific public IP).
-- name: Resolve ace_public_address (inventory override only)
+# --- Public / private IP resolution -----------------------------------------
+# LAN: leave ACE_PUBLIC_ADDRESS empty unless the inventory pins one — the
+# host's NIC IP is the LAN-reachable one, no auto-lookup needed.
+# GCP: query the metadata service (from the target host, no auth required)
+# for both the external and internal IPs so the UI dropdown offers the
+# right options. Inventory pins win over auto-detect either way.
+- name: Resolve ace_public_address (inventory override wins)
   ansible.builtin.set_fact:
     ace_public_address_effective: "{{ ace_public_address | default('') }}"
+
+- name: Detect GCP external IP from metadata (when empty in inventory)
+  ansible.builtin.uri:
+    url: http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip
+    headers:
+      Metadata-Flavor: Google
+    return_content: true
+  register: gcp_ext_ip
+  when:
+    - ace_cloud | default('') == 'gcp'
+    - ace_public_address_effective == ''
+
+- name: Apply detected GCP external IP
+  ansible.builtin.set_fact:
+    ace_public_address_effective: "{{ gcp_ext_ip.content | trim }}"
+  when:
+    - ace_cloud | default('') == 'gcp'
+    - ace_public_address_effective == ''
+    - gcp_ext_ip is defined
+    - gcp_ext_ip.content is defined
+
+- name: Resolve ace_local_ips (inventory override wins)
+  ansible.builtin.set_fact:
+    ace_local_ips_effective: "{{ ace_local_ips | default('') }}"
+
+- name: Detect GCP internal IP from metadata (when empty in inventory)
+  ansible.builtin.uri:
+    url: http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip
+    headers:
+      Metadata-Flavor: Google
+    return_content: true
+  register: gcp_int_ip
+  when:
+    - ace_cloud | default('') == 'gcp'
+    - ace_local_ips_effective == ''
+
+- name: Apply detected GCP internal IP
+  ansible.builtin.set_fact:
+    ace_local_ips_effective: "{{ gcp_int_ip.content | trim }}"
+  when:
+    - ace_cloud | default('') == 'gcp'
+    - ace_local_ips_effective == ''
+    - gcp_int_ip is defined
+    - gcp_int_ip.content is defined
 
 # Basic auth is enforced by ace itself, so no bind-address rewrite is
 # needed — the same 0.0.0.0:8086 listener now requires credentials.
@@ -36,18 +91,20 @@
       group_vars file.
   when: ace_auth_enabled | default(false)
 
-# Source code → target. Use rsync (synchronize module) so re-deploys
-# only ship the delta. The build context for ace is the install dir;
-# voip_patrol is a sibling so the Dockerfile's additional_contexts
-# resolves correctly.
+# --- Install dir + source ---------------------------------------------------
+# LAN: /opt/aizan/ace owned by root (become: true).
+# GCP: $HOME/ace owned by the login user (no become needed for the dir).
 - name: Ensure install dir exists
+  become: true
   ansible.builtin.file:
     path: "{{ ace_install_dir }}"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
+    group: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
     mode: '0755'
 
+# Source code → target. Use rsync (synchronize module) so re-deploys
+# only ship the delta. The build context for ace is the install dir.
 - name: Ship ace source to host
   ansible.posix.synchronize:
     src: "{{ ace_source_dir }}/"
@@ -62,7 +119,12 @@
       - "--exclude=ansible"       # don't ship the playbook into the build context
     times: true
 
+# Only ship voip_patrol source when the target is going to build it —
+# GCP uses the prebuilt jchavanton/voip_patrol image (Dockerfile stage 1
+# already `FROM jchavanton/voip_patrol:tone_detector`), so the sibling
+# checkout isn't needed there.
 - name: Ship voip_patrol source to host
+  when: not (ace_use_prebuilt_voip_patrol | default(false))
   ansible.posix.synchronize:
     src: "{{ voip_patrol_source_dir }}/"
     dest: "{{ ace_install_dir }}/../voip_patrol/"
@@ -82,53 +144,69 @@
       - "--exclude=pjproject/**/output"    # build outputs per module
     times: true
 
+# When the Dockerfile pulls a prebuilt voip_patrol image, the compose
+# file's additional_contexts.voip_patrol pointer to ../voip_patrol is
+# dead weight — but docker refuses to build with a missing context. Strip
+# the additional_contexts block from the shipped docker-compose.yml (same
+# transformation install-ace.sh performs).
+- name: Strip additional_contexts from docker-compose.yml (prebuilt path)
+  when: ace_use_prebuilt_voip_patrol | default(false)
+  ansible.builtin.replace:
+    path: "{{ ace_install_dir }}/docker-compose.yml"
+    regexp: '^(\s*)additional_contexts:\s*\n((\1\s+.*\n)|(\s*#.*\n)|(\s*\n))*'
+    replace: ''
+
 # Per-host overrides for the compose stack. The .env file is the only
 # place a deployer should need to set values; the compose file itself
 # reads them with ${VAR:-default} so changes don't require editing it.
 - name: Render compose .env
+  become: true
   ansible.builtin.template:
     src: ace.env.j2
     dest: "{{ ace_install_dir }}/.env"
-    owner: root
-    group: root
+    owner: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
+    group: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
     mode: '0644'
   notify: restart ace
 
 # Host data dirs. scenarios/ stays operator-managed (we don't
-# overwrite). runs/ accumulates run history; owned by root since the
-# container writes as root.
+# overwrite). runs/ accumulates run history.
 - name: Ensure scenarios dir exists
+  become: true
   ansible.builtin.file:
     path: "{{ ace_install_dir }}/scenarios"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
+    group: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
     mode: '0755'
 
 - name: Ensure runs dir exists
+  become: true
   ansible.builtin.file:
     path: "{{ ace_install_dir }}/runs"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
+    group: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
     mode: '0755'
 
 # Auth dir always exists — the compose bind-mount references it whether
 # auth is on or off, and docker won't create the source dir for you.
 - name: Ensure auth dir exists
+  become: true
   ansible.builtin.file:
     path: "{{ ace_install_dir }}/auth"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
+    group: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
     mode: '0750'
 
 - name: Render htpasswd
+  become: true
   ansible.builtin.template:
     src: htpasswd.j2
     dest: "{{ ace_install_dir }}/auth/htpasswd"
-    owner: root
-    group: root
+    owner: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
+    group: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
     mode: '0640'
   when: ace_auth_enabled | default(false)
   # No restart needed — ace re-reads the file every 10s. The compose
@@ -138,11 +216,23 @@
 # `docker compose up -d --build` is the single source of truth. The
 # --build flag re-runs the image build only when the Dockerfile / source
 # changed; otherwise it's a fast no-op. changed_when keys off compose's
-# output so ansible's reporting reflects what actually happened.
+# output so ansible's reporting reflects what actually happened. Docker
+# on the GCP host requires sudo (login user isn't in the docker group).
 - name: docker compose up
+  become: true
   ansible.builtin.command:
     cmd: docker compose up -d --build
     chdir: "{{ ace_install_dir }}"
+  environment:
+    # docker compose reads .env from cwd, but explicitly pass the
+    # variables through so `sudo` doesn't strip them.
+    ACE_ADDR: "{{ ace_http_addr_effective }}"
+    ACE_VOIP_PATROL_PORT: "{{ ace_sip_port | string }}"
+    ACE_RTP_PORT_START: "{{ ace_rtp_port_start | string }}"
+    ACE_RTP_PORT_END: "{{ ace_rtp_port_end | string }}"
+    ACE_PUBLIC_ADDRESS: "{{ ace_public_address_effective }}"
+    ACE_LOCAL_IPS: "{{ ace_local_ips_effective | default('') }}"
+    ACE_BASIC_AUTH_HTPASSWD: "{{ '/data/auth/htpasswd' if ace_auth_enabled | default(false) else '' }}"
   register: compose_up
   changed_when: >
     'Started' in compose_up.stderr or

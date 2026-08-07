@@ -18,45 +18,46 @@ import (
 //	stdout.log      voip_patrol's stdout/stderr (truncated to last N lines)
 //	*.wav           per-leg recordings, if record="true" was set
 type Run struct {
-	ID           string    `json:"id"`            // dir name; sortable lexicographically
-	Scenario     string    `json:"scenario"`      // scenario name
-	StartedAt    time.Time `json:"started_at"`
-	StartedBy    string    `json:"started_by,omitempty"` // authenticated email from oauth2-proxy; empty when auth is off
+	ID        string    `json:"id"`       // dir name; sortable lexicographically
+	Scenario  string    `json:"scenario"` // scenario name
+	StartedAt time.Time `json:"started_at"`
+	StartedBy string    `json:"started_by,omitempty"` // authenticated email from oauth2-proxy; empty when auth is off
 	// Ports actually used for this run. Zero on older runs recorded
 	// before this field existed — treat as "config default at the time".
-	SIPPort      int       `json:"sip_port,omitempty"`
-	RTPPortStart int       `json:"rtp_port_start,omitempty"`
-	RTPPortEnd   int       `json:"rtp_port_end,omitempty"`
-	FinishedAt   time.Time `json:"finished_at,omitempty"`
-	Status       string    `json:"status"`        // running | done | error
-	ExitCode     int       `json:"exit_code"`
-	Error        string    `json:"error,omitempty"` // controller-side errors (non-zero exit, parse fail)
+	SIPPort       int       `json:"sip_port,omitempty"`
+	RTPPortStart  int       `json:"rtp_port_start,omitempty"`
+	RTPPortEnd    int       `json:"rtp_port_end,omitempty"`
+	PublicAddress string    `json:"public_address,omitempty"`
+	FinishedAt    time.Time `json:"finished_at,omitempty"`
+	Status        string    `json:"status"` // running | done | error
+	ExitCode      int       `json:"exit_code"`
+	Error         string    `json:"error,omitempty"` // controller-side errors (non-zero exit, parse fail)
 
 	// Aggregates parsed from results.json after the run finishes. Empty
 	// while the run is in progress.
-	Calls        []CallResult `json:"calls,omitempty"`
-	Aggregate    Aggregate    `json:"aggregate,omitempty"`
+	Calls     []CallResult `json:"calls,omitempty"`
+	Aggregate Aggregate    `json:"aggregate,omitempty"`
 }
 
 // CallResult is one row out of voip_patrol's results.json. Field names
 // match voip_patrol's JSON keys verbatim so the parser is a no-op cast.
 type CallResult struct {
-	Label             string    `json:"label"`
-	Start             string    `json:"start"`
-	End               string    `json:"end"`
-	Action            string    `json:"action"`
-	From              string    `json:"from"`
-	To                string    `json:"to"`
-	Result            string    `json:"result"`             // PASS | FAIL
-	ExpectedCauseCode int       `json:"expected_cause_code"`
-	CauseCode         int       `json:"cause_code"`
-	Reason            string    `json:"reason"`
-	CallID            string    `json:"callid"`
-	Transport         string    `json:"transport"`
-	PeerSocket        string    `json:"peer_socket"`
-	Duration          int       `json:"duration"`
-	MaxDuration       int       `json:"max_duration"`
-	HangupDuration    int       `json:"hangup_duration"`
+	Label             string     `json:"label"`
+	Start             string     `json:"start"`
+	End               string     `json:"end"`
+	Action            string     `json:"action"`
+	From              string     `json:"from"`
+	To                string     `json:"to"`
+	Result            string     `json:"result"` // PASS | FAIL
+	ExpectedCauseCode int        `json:"expected_cause_code"`
+	CauseCode         int        `json:"cause_code"`
+	Reason            string     `json:"reason"`
+	CallID            string     `json:"callid"`
+	Transport         string     `json:"transport"`
+	PeerSocket        string     `json:"peer_socket"`
+	Duration          int        `json:"duration"`
+	MaxDuration       int        `json:"max_duration"`
+	HangupDuration    int        `json:"hangup_duration"`
 	SIPLatency        SIPLatency `json:"sip_latency"`
 	RTPStats          []RTPStats `json:"rtp_stats"`
 }
@@ -70,12 +71,12 @@ type SIPLatency struct {
 
 // RTPStats mirrors one entry of voip_patrol's "rtp_stats" array.
 type RTPStats struct {
-	RTT             int            `json:"rtt"`
-	RemoteRTPSocket string         `json:"remote_rtp_socket"`
-	CodecName       string         `json:"codec_name"`
-	ClockRate       string         `json:"clock_rate"`
-	Tx              RTPDirection   `json:"Tx"`
-	Rx              RTPDirection   `json:"Rx"`
+	RTT             int          `json:"rtt"`
+	RemoteRTPSocket string       `json:"remote_rtp_socket"`
+	CodecName       string       `json:"codec_name"`
+	ClockRate       string       `json:"clock_rate"`
+	Tx              RTPDirection `json:"Tx"`
+	Rx              RTPDirection `json:"Rx"`
 }
 
 type RTPDirection struct {
