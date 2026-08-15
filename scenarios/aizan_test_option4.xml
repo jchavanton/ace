@@ -14,7 +14,8 @@
             rtp_stats="true"
             record="true"
             play_dtmf="WW4WW12345678#"
-            repeat="49"/>
+            repeat="49"
+            repeat_delay="500"/>
 
     <action type="wait" complete="true"/>
   </actions>

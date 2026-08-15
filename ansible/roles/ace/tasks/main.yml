@@ -121,7 +121,7 @@
 
 # Only ship voip_patrol source when the target is going to build it —
 # GCP uses the prebuilt jchavanton/voip_patrol image (Dockerfile stage 1
-# already `FROM jchavanton/voip_patrol:tone_detector`), so the sibling
+# already `FROM jchavanton/voip_patrol:0.10.1`), so the sibling
 # checkout isn't needed there.
 - name: Ship voip_patrol source to host
   when: not (ace_use_prebuilt_voip_patrol | default(false))
