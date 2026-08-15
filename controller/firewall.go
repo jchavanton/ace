@@ -14,22 +14,19 @@ import (
 )
 
 // Firewall programs the host's iptables filter table with the operator's
-// allow-list plus an optional protected port range that ACE DROPs at
-// the end of the chain. Rules land in a dedicated chain (ACE-FIREWALL)
+// ordered rule list. Rules land in a dedicated chain (ACE-FIREWALL)
 // that ACE owns exclusively — we flush and rewrite it on every Apply.
 // The chain is hooked into INPUT once (idempotent); ACE never touches
 // other rules in INPUT.
 //
-// Layout inside the chain, in order:
-//  1. Allow-list rules (each ACCEPT).
-//  2. Terminal DROP for cfg.ProtectedPorts, tcp + udp (skipped if empty).
+// Each rule has an explicit Action (ACCEPT or DROP). iptables evaluates
+// top-to-bottom, first match wins. Typical layout for a SIP guard:
+// ACCEPT rows for the allow-list first, then a catch-all DROP row for
+// the protected port range. Rows below a broad DROP are unreachable —
+// that's the tradeoff for having full control.
 //
-// The tail DROP is what actually blocks traffic; the allow-list only
-// matters because it runs first. An empty rule set with a non-empty
-// ProtectedPorts closes those ports to everyone. An empty ProtectedPorts
-// makes the chain a pure allow-list that falls through — matches the
-// pre-2026-08-15 behavior for operators who want to manage deny outside
-// ACE.
+// An empty rule set is a no-op: the chain is empty, execution falls
+// through the implicit RETURN to whatever else is in INPUT.
 //
 // Requires the iptables binary and NET_ADMIN in the container. Apply
 // returns a clear error when either is missing.
@@ -75,9 +72,6 @@ func (f *Firewall) SaveAndApply(cfg models.FirewallConfig) error {
 		if err := cfg.Rules[i].Validate(); err != nil {
 			return fmt.Errorf("rule %d: %w", i+1, err)
 		}
-	}
-	if err := models.ValidateProtectedPorts(cfg.ProtectedPorts); err != nil {
-		return fmt.Errorf("protected ports: %w", err)
 	}
 	if err := models.SaveFirewallConfig(f.StateDir, cfg); err != nil {
 		return fmt.Errorf("save firewall.json: %w", err)
@@ -138,7 +132,7 @@ func (f *Firewall) applyLocked(cfg models.FirewallConfig) error {
 
 	// Build the restore payload. --noflush leaves other tables/chains
 	// untouched; the `:CHAIN - [0:0]` line resets just this chain.
-	payload := buildRestorePayload(f.Chain, cfg.Rules, cfg.ProtectedPorts)
+	payload := buildRestorePayload(f.Chain, cfg.Rules)
 
 	cmd := exec.Command(ipt+"-restore", "--noflush", "-T", "filter")
 	cmd.Stdin = strings.NewReader(payload)
@@ -156,22 +150,15 @@ func (f *Firewall) applyLocked(cfg models.FirewallConfig) error {
 }
 
 // buildRestorePayload emits the text an `iptables-restore --noflush -T
-// filter` call will accept: reset the chain, add each allow-list rule
-// as ACCEPT, then (if protectedPorts is non-empty) two terminal DROP
-// rules covering tcp+udp for that port spec, then COMMIT. Allow rules
-// are emitted in the caller's order — the UI lets operators reorder if
-// they care.
-func buildRestorePayload(chain string, rules []models.FirewallRule, protectedPorts string) string {
+// filter` call will accept: reset the chain, add each rule with its
+// configured action, COMMIT. Rules are emitted in the caller's order
+// — the UI lets operators reorder to control precedence.
+func buildRestorePayload(chain string, rules []models.FirewallRule) string {
 	var b strings.Builder
 	b.WriteString("*filter\n")
 	fmt.Fprintf(&b, ":%s - [0:0]\n", chain)
 	for _, r := range rules {
 		fmt.Fprintf(&b, "-A %s%s\n", chain, ruleArgs(r))
-	}
-	if p := strings.TrimSpace(protectedPorts); p != "" {
-		dport := strings.ReplaceAll(p, "-", ":")
-		fmt.Fprintf(&b, "-A %s -p tcp --dport %s -m comment --comment \"ace protected\" -j DROP\n", chain, dport)
-		fmt.Fprintf(&b, "-A %s -p udp --dport %s -m comment --comment \"ace protected\" -j DROP\n", chain, dport)
 	}
 	b.WriteString("COMMIT\n")
 	return b.String()
@@ -179,7 +166,8 @@ func buildRestorePayload(chain string, rules []models.FirewallRule, protectedPor
 
 // ruleArgs turns a FirewallRule into the iptables argument tail
 // (starting with a leading space). --dport requires -p tcp|udp; the
-// validator enforces that pairing.
+// validator enforces that pairing. r.Action is assumed already
+// normalized to ACCEPT or DROP by Validate().
 func ruleArgs(r models.FirewallRule) string {
 	var b strings.Builder
 	if r.CIDR != "" {
@@ -198,7 +186,11 @@ func ruleArgs(r models.FirewallRule) string {
 	if r.Comment != "" {
 		fmt.Fprintf(&b, ` -m comment --comment "%s"`, r.Comment)
 	}
-	b.WriteString(" -j ACCEPT")
+	action := r.Action
+	if action == "" {
+		action = "ACCEPT"
+	}
+	fmt.Fprintf(&b, " -j %s", action)
 	return b.String()
 }
 

@@ -27,7 +27,6 @@ func (s *Server) handleFirewall(c *gin.Context) {
 		"Page":            "firewall",
 		"ContentTemplate": "content_firewall",
 		"Rules":           cfg.Rules,
-		"ProtectedPorts":  cfg.ProtectedPorts,
 		"Interfaces":      controller.InterfaceNames(),
 		"Chain":           s.Firewall.Chain,
 		"LoadError": func() string {
@@ -74,6 +73,7 @@ func (s *Server) handleFirewallSave(c *gin.Context) {
 	transports := getSlice("transport")
 	ports := getSlice("port")
 	ifaces := getSlice("iface")
+	actions := getSlice("action")
 	comments := getSlice("comment")
 
 	n := len(cidrs)
@@ -99,17 +99,16 @@ func (s *Server) handleFirewallSave(c *gin.Context) {
 		if i < len(ifaces) {
 			r.Interface = ifaces[i]
 		}
+		if i < len(actions) {
+			r.Action = actions[i]
+		}
 		if i < len(comments) {
 			r.Comment = comments[i]
 		}
 		rules = append(rules, r)
 	}
 
-	protectedPorts := ""
-	if v := getSlice("protected_ports"); len(v) > 0 {
-		protectedPorts = strings.TrimSpace(v[0])
-	}
-	cfg := models.FirewallConfig{Rules: rules, ProtectedPorts: protectedPorts}
+	cfg := models.FirewallConfig{Rules: rules}
 	if err := s.Firewall.SaveAndApply(cfg); err != nil {
 		// Round-trip the error through a query param so the redirect
 		// pattern is preserved and the operator sees the exact iptables

@@ -6,10 +6,9 @@
 
 <p class="text-muted small">
   Applied to the host's <code>iptables</code> INPUT chain via the dedicated
-  <code>{{ .Chain }}</code> chain. Allow-list rules run first (matches ACCEPT'd); anything hitting the
-  <em>protected ports</em> below is then DROP'd — so only listed sources reach those ports.
-  Clearing the protected range disables the DROP and the chain falls through. Save &amp; apply rewrites
-  the chain atomically.
+  <code>{{ .Chain }}</code> chain. Rules are evaluated top-to-bottom; first match wins. Typical layout:
+  ACCEPT rows for your allow-list, then a catch-all DROP row for the port range you want to protect
+  (e.g. <code>0.0.0.0/0</code> udp <code>5060-5090</code> DROP). Save &amp; apply rewrites the chain atomically.
 </p>
 
 {{ if .Message }}<div class="alert alert-success py-2 small">{{ .Message }}</div>{{ end }}
@@ -17,21 +16,15 @@
 {{ if .LoadError }}<div class="alert alert-warning py-2 small">Could not load firewall.json: {{ .LoadError }}</div>{{ end }}
 
 <form method="post" action="/firewall" id="fw-form">
-  <div class="row g-2 align-items-center mb-3">
-    <div class="col-auto"><label for="protected_ports" class="col-form-label small">Protected ports (tcp+udp DROP)</label></div>
-    <div class="col-auto">
-      <input type="text" id="protected_ports" name="protected_ports" class="form-control form-control-sm font-monospace"
-             style="width:14rem" value="{{ .ProtectedPorts }}" placeholder="5060-5090 (blank to disable)">
-    </div>
-  </div>
   <div class="table-responsive">
     <table class="table table-sm align-middle" id="fw-table">
       <thead>
         <tr>
-          <th style="width:22%">Source CIDR</th>
-          <th style="width:12%">Interface</th>
-          <th style="width:12%">Transport</th>
-          <th style="width:14%">Port(s)</th>
+          <th style="width:20%">Source CIDR</th>
+          <th style="width:11%">Interface</th>
+          <th style="width:10%">Transport</th>
+          <th style="width:13%">Port(s)</th>
+          <th style="width:10%">Action</th>
           <th>Comment</th>
           <th></th>
         </tr>
@@ -57,6 +50,12 @@
             </select>
           </td>
           <td><input type="text" name="port" class="form-control form-control-sm font-monospace" value="{{ .Port }}" placeholder="5093 or 4000-14000"></td>
+          <td>
+            <select name="action" class="form-select form-select-sm">
+              <option value="ACCEPT"{{ if or (eq .Action "") (eq .Action "ACCEPT") }} selected{{ end }}>ACCEPT</option>
+              <option value="DROP"{{ if eq .Action "DROP" }} selected{{ end }}>DROP</option>
+            </select>
+          </td>
           <td><input type="text" name="comment" class="form-control form-control-sm" value="{{ .Comment }}" placeholder="(optional)"></td>
           <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()">×</button></td>
         </tr>
@@ -88,6 +87,12 @@
       </select>
     </td>
     <td><input type="text" name="port" class="form-control form-control-sm font-monospace" placeholder="5093 or 4000-14000"></td>
+    <td>
+      <select name="action" class="form-select form-select-sm">
+        <option value="ACCEPT" selected>ACCEPT</option>
+        <option value="DROP">DROP</option>
+      </select>
+    </td>
     <td><input type="text" name="comment" class="form-control form-control-sm" placeholder="(optional)"></td>
     <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()">×</button></td>
   </tr>

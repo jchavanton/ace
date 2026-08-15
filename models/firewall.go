@@ -11,9 +11,11 @@ import (
 	"strings"
 )
 
-// FirewallRule is one ACCEPT entry the operator has added via the UI.
-// The rule set is an allow-list — matches ACCEPT, misses fall through
-// (chain default is RETURN, so anything else in INPUT still runs).
+// FirewallRule is one entry in the operator's ordered rule list.
+// Rows are evaluated top-to-bottom; the first match wins. That means
+// a typical "allow-list + guard" setup is ACCEPT rows first, DROP rows
+// last. Misses fall through the chain (implicit RETURN) to whatever
+// else is in INPUT.
 //
 // Fields map 1:1 to iptables flags:
 //
@@ -21,42 +23,22 @@ import (
 //	Interface  -> -i <iface>           (input interface; optional, "" = any)
 //	Transport  -> -p tcp|udp           (optional, "" = any protocol)
 //	Port       -> --dport N or N:M     (optional; requires Transport when set)
+//	Action     -> -j ACCEPT|DROP       ("" defaults to ACCEPT for backward compat)
 //	Comment    -> -m comment --comment (optional; sanitized)
 type FirewallRule struct {
 	CIDR      string `json:"cidr"`
 	Interface string `json:"interface,omitempty"`
 	Transport string `json:"transport,omitempty"` // "" | "tcp" | "udp"
 	Port      string `json:"port,omitempty"`      // "5093" or "4000-14000"
+	Action    string `json:"action,omitempty"`    // "" | "ACCEPT" | "DROP"
 	Comment   string `json:"comment,omitempty"`
 }
 
-// FirewallConfig is the persisted allow-list plus the optional
-// protected port range that gets DROP'd at the end of the chain.
-// Serialized to firewall.json in the state dir.
-//
-// ProtectedPorts is a port spec ("5060-5090" or "5060") that ACE
-// appends as a terminal DROP for both tcp and udp after the allow-list.
-// Empty string = no drop (chain falls through to the rest of INPUT).
+// FirewallConfig is the persisted rule list. Serialized to
+// firewall.json in the state dir. Zero value = no rules (chain is
+// empty, all traffic falls through to INPUT).
 type FirewallConfig struct {
-	Rules          []FirewallRule `json:"rules"`
-	ProtectedPorts string         `json:"protected_ports,omitempty"`
-}
-
-// DefaultProtectedPorts is what a fresh install gets when firewall.json
-// doesn't exist yet — the SIP signaling window used by voip_patrol and
-// aizan scenarios. Kept out of the zero value so callers can distinguish
-// "operator explicitly cleared it" from "never configured."
-const DefaultProtectedPorts = "5060-5090"
-
-// ValidateProtectedPorts returns nil for an empty spec (drop disabled)
-// or a well-formed port / port range. Handlers turn a non-nil error
-// into a 400.
-func ValidateProtectedPorts(s string) error {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil
-	}
-	return validatePortSpec(s)
+	Rules []FirewallRule `json:"rules"`
 }
 
 // Validate checks the rule is well-formed enough to hand to iptables.
@@ -66,7 +48,15 @@ func (r *FirewallRule) Validate() error {
 	r.Interface = strings.TrimSpace(r.Interface)
 	r.Transport = strings.ToLower(strings.TrimSpace(r.Transport))
 	r.Port = strings.TrimSpace(r.Port)
+	r.Action = strings.ToUpper(strings.TrimSpace(r.Action))
 	r.Comment = strings.TrimSpace(r.Comment)
+
+	if r.Action == "" {
+		r.Action = "ACCEPT"
+	}
+	if r.Action != "ACCEPT" && r.Action != "DROP" {
+		return fmt.Errorf("action: must be ACCEPT or DROP (got %q)", r.Action)
+	}
 
 	if r.CIDR == "" {
 		return errors.New("cidr required")
@@ -169,15 +159,15 @@ func firewallConfigPath(stateDir string) string {
 }
 
 // LoadFirewallConfig reads firewall.json under stateDir. Missing file
-// returns an empty rule set with the default protected port range — a
-// fresh install ships with SIP DROP'd until the operator adds
-// allow-list entries.
+// returns a zero FirewallConfig + nil — the "no rules yet" case.
+// Rules without an explicit action default to ACCEPT on Validate(), so
+// files written by the pre-Action version of ACE load unchanged.
 func LoadFirewallConfig(stateDir string) (FirewallConfig, error) {
 	p := firewallConfigPath(stateDir)
 	f, err := os.Open(p)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return FirewallConfig{ProtectedPorts: DefaultProtectedPorts}, nil
+			return FirewallConfig{}, nil
 		}
 		return FirewallConfig{}, err
 	}
