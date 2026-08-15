@@ -43,6 +43,20 @@ func main() {
 	} else if n > 0 {
 		log.Printf("ace: marked %d orphaned run(s) as errored", n)
 	}
+	// Firewall management is opt-in. When enabled, load the persisted
+	// rules and push them into iptables so a container restart doesn't
+	// silently drop the operator's allow-list. Errors are logged but
+	// don't fail startup — the /firewall page will show the same error
+	// and the operator can fix it (missing NET_ADMIN, missing iptables
+	// binary) without an ace restart.
+	if cfg.FirewallStateDir != "" {
+		fw := controller.NewFirewall(cfg.FirewallStateDir)
+		fw.SavePath = cfg.FirewallSavePath
+		srv.Firewall = fw
+		if err := fw.ApplyPersisted(); err != nil {
+			log.Printf("ace: firewall apply on startup: %v", err)
+		}
+	}
 	srv.Register(r)
 
 	log.Printf("ace listening on http://%s (voip_patrol=%s scenarios=%s runs=%s)",

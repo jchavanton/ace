@@ -21,8 +21,9 @@ import (
 
 // Server holds shared state for the handlers.
 type Server struct {
-	Cfg    *config.Config
-	Runner *controller.Runner
+	Cfg      *config.Config
+	Runner   *controller.Runner
+	Firewall *controller.Firewall // nil = firewall page disabled
 }
 
 // Register installs the routes on r. When Cfg.BasicAuthHtpasswd is set,
@@ -43,6 +44,8 @@ func (s *Server) Register(r *gin.Engine) {
 	r.GET("/runs/:id/log", s.handleRunLog)
 	r.GET("/runs/:id/wav/:file", s.handleRunWAV)
 	r.POST("/runs/:id/delete", s.handleRunDelete)
+	r.GET("/firewall", s.handleFirewall)
+	r.POST("/firewall", s.handleFirewallSave)
 }
 
 func (s *Server) handleIndex(c *gin.Context) {

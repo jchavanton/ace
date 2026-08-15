@@ -78,6 +78,16 @@ type Config struct {
 	// voip_patrol is whatever the scenario has selected (or the global
 	// PublicAddress default).
 	DetectedPublicIP string
+
+	// FirewallStateDir is where the /firewall page persists its
+	// firewall.json rule set. Empty disables the Firewall page entirely
+	// (dev environments without iptables / NET_ADMIN just leave it off).
+	FirewallStateDir string
+
+	// FirewallSavePath, when non-empty, is where the runtime iptables
+	// state is dumped after each apply so a reboot (or iptables-persistent)
+	// can restore it. Typically "/etc/iptables/rules.v4".
+	FirewallSavePath string
 }
 
 // FromFlags parses flags and validates the result. Exits with a clear
@@ -96,6 +106,8 @@ func FromFlags() *Config {
 	flag.StringVar(&c.RunsDir, "runs-dir", "./runs", "directory where per-run output lands")
 	flag.StringVar(&c.VoiceRefDir, "voice-ref-dir", "/voice_ref_files", "source dir for voip_patrol reference WAVs; symlinked into each run dir as 'voice_ref_files'. Empty disables.")
 	flag.StringVar(&c.BasicAuthHtpasswd, "basic-auth-htpasswd", "", "path to htpasswd file (bcrypt); empty = no auth")
+	flag.StringVar(&c.FirewallStateDir, "firewall-state-dir", "", "directory holding firewall.json for the /firewall page; empty disables the page")
+	flag.StringVar(&c.FirewallSavePath, "firewall-save-path", "", "iptables-save target for reboot-persistence (e.g. /etc/iptables/rules.v4); empty = runtime only")
 	flag.Parse()
 
 	// Resolve to absolute paths so the gin handlers don't need to care

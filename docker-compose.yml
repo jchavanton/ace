@@ -27,6 +27,11 @@ services:
         voip_patrol: ../voip_patrol
       dockerfile: Dockerfile
     network_mode: host
+    # NET_ADMIN lets ace program the host's iptables from the /firewall
+    # page. Host networking already puts us in the host's network
+    # namespace; this cap unlocks the syscalls iptables needs.
+    cap_add:
+      - NET_ADMIN
     restart: unless-stopped
     environment:
       # Values come from .env (rendered by ansible on deploy) or fall
@@ -49,9 +54,18 @@ services:
       # the host and sets ACE_BASIC_AUTH_HTPASSWD=/data/auth/htpasswd in
       # .env when ace_auth_enabled=true.
       ACE_BASIC_AUTH_HTPASSWD: "${ACE_BASIC_AUTH_HTPASSWD:-}"
+      # When set, iptables state is dumped here after each Apply so it
+      # survives a host reboot (needs iptables-persistent on the host).
+      # Empty = runtime-only; the /firewall page still works, but a
+      # host reboot loses the chain contents.
+      ACE_FIREWALL_SAVE_PATH: "${ACE_FIREWALL_SAVE_PATH:-}"
     volumes:
       - ./scenarios:/data/scenarios:rw
       - ./runs:/data/runs:rw
       # Bind-mount ./auth as read-only. Present-but-empty when auth is
       # off; ace only reads the file when ACE_BASIC_AUTH_HTPASSWD is set.
       - ./auth:/data/auth:ro
+      # Persists firewall.json across container restarts. The file is
+      # loaded and applied at startup so the operator's allow-list
+      # survives a `docker compose up -d` cycle.
+      - ./firewall:/data/firewall:rw

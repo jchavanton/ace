@@ -41,6 +41,7 @@ FROM debian:trixie-slim
 # libasound for ALSA stubs even when running headless).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libcurl4 libssl3 libopus0 libasound2t64 libuuid1 ca-certificates \
+        iptables \
     && rm -rf /var/lib/apt/lists/*
 
 # voip_patrol binary + reference WAVs (needed by some scenarios for the
@@ -64,7 +65,8 @@ WORKDIR /app
 ENV ACE_ADDR=0.0.0.0:8086 \
     ACE_VOIP_PATROL_BIN=/usr/local/bin/voip_patrol \
     ACE_SCENARIOS_DIR=/data/scenarios \
-    ACE_RUNS_DIR=/data/runs
+    ACE_RUNS_DIR=/data/runs \
+    ACE_FIREWALL_STATE_DIR=/data/firewall
 
 # Translate the env-var contract into flags. Public address is
 # optional; we only pass --public-address when ACE_PUBLIC_ADDRESS is
@@ -77,6 +79,8 @@ CMD ["/bin/sh", "-c", "exec /usr/local/bin/ace \
     -rtp-port-end ${ACE_RTP_PORT_END:-14000} \
     -scenarios-dir ${ACE_SCENARIOS_DIR} \
     -runs-dir ${ACE_RUNS_DIR} \
+    -firewall-state-dir ${ACE_FIREWALL_STATE_DIR} \
     ${ACE_PUBLIC_ADDRESS:+-public-address ${ACE_PUBLIC_ADDRESS}} \
     ${ACE_LOCAL_IPS:+-local-ips ${ACE_LOCAL_IPS}} \
+    ${ACE_FIREWALL_SAVE_PATH:+-firewall-save-path ${ACE_FIREWALL_SAVE_PATH}} \
     ${ACE_BASIC_AUTH_HTPASSWD:+-basic-auth-htpasswd ${ACE_BASIC_AUTH_HTPASSWD}}"]
