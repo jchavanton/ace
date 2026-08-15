@@ -30,10 +30,33 @@ type FirewallRule struct {
 	Comment   string `json:"comment,omitempty"`
 }
 
-// FirewallConfig is the persisted allow-list. Serialized to
-// firewall.json in the state dir. Zero value = no rules.
+// FirewallConfig is the persisted allow-list plus the optional
+// protected port range that gets DROP'd at the end of the chain.
+// Serialized to firewall.json in the state dir.
+//
+// ProtectedPorts is a port spec ("5060-5090" or "5060") that ACE
+// appends as a terminal DROP for both tcp and udp after the allow-list.
+// Empty string = no drop (chain falls through to the rest of INPUT).
 type FirewallConfig struct {
-	Rules []FirewallRule `json:"rules"`
+	Rules          []FirewallRule `json:"rules"`
+	ProtectedPorts string         `json:"protected_ports,omitempty"`
+}
+
+// DefaultProtectedPorts is what a fresh install gets when firewall.json
+// doesn't exist yet — the SIP signaling window used by voip_patrol and
+// aizan scenarios. Kept out of the zero value so callers can distinguish
+// "operator explicitly cleared it" from "never configured."
+const DefaultProtectedPorts = "5060-5090"
+
+// ValidateProtectedPorts returns nil for an empty spec (drop disabled)
+// or a well-formed port / port range. Handlers turn a non-nil error
+// into a 400.
+func ValidateProtectedPorts(s string) error {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	return validatePortSpec(s)
 }
 
 // Validate checks the rule is well-formed enough to hand to iptables.
@@ -146,13 +169,15 @@ func firewallConfigPath(stateDir string) string {
 }
 
 // LoadFirewallConfig reads firewall.json under stateDir. Missing file
-// returns a zero FirewallConfig + nil — the "no rules yet" case.
+// returns an empty rule set with the default protected port range — a
+// fresh install ships with SIP DROP'd until the operator adds
+// allow-list entries.
 func LoadFirewallConfig(stateDir string) (FirewallConfig, error) {
 	p := firewallConfigPath(stateDir)
 	f, err := os.Open(p)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return FirewallConfig{}, nil
+			return FirewallConfig{ProtectedPorts: DefaultProtectedPorts}, nil
 		}
 		return FirewallConfig{}, err
 	}

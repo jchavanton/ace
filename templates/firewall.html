@@ -5,9 +5,11 @@
 </div>
 
 <p class="text-muted small">
-  Allow-list rules applied to the host's <code>iptables</code> INPUT chain via the dedicated
-  <code>{{ .Chain }}</code> chain. Matching packets are ACCEPT'd; misses fall through to the rest of
-  INPUT. Save &amp; apply rewrites the chain atomically.
+  Applied to the host's <code>iptables</code> INPUT chain via the dedicated
+  <code>{{ .Chain }}</code> chain. Allow-list rules run first (matches ACCEPT'd); anything hitting the
+  <em>protected ports</em> below is then DROP'd — so only listed sources reach those ports.
+  Clearing the protected range disables the DROP and the chain falls through. Save &amp; apply rewrites
+  the chain atomically.
 </p>
 
 {{ if .Message }}<div class="alert alert-success py-2 small">{{ .Message }}</div>{{ end }}
@@ -15,6 +17,13 @@
 {{ if .LoadError }}<div class="alert alert-warning py-2 small">Could not load firewall.json: {{ .LoadError }}</div>{{ end }}
 
 <form method="post" action="/firewall" id="fw-form">
+  <div class="row g-2 align-items-center mb-3">
+    <div class="col-auto"><label for="protected_ports" class="col-form-label small">Protected ports (tcp+udp DROP)</label></div>
+    <div class="col-auto">
+      <input type="text" id="protected_ports" name="protected_ports" class="form-control form-control-sm font-monospace"
+             style="width:14rem" value="{{ .ProtectedPorts }}" placeholder="5060-5090 (blank to disable)">
+    </div>
+  </div>
   <div class="table-responsive">
     <table class="table table-sm align-middle" id="fw-table">
       <thead>
