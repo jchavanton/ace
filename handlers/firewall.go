@@ -108,7 +108,7 @@ func (s *Server) handleFirewallSave(c *gin.Context) {
 		rules = append(rules, r)
 	}
 
-	cfg := models.FirewallConfig{Rules: rules}
+	cfg := models.FirewallConfig{Rules: models.SortRulesAcceptFirst(rules)}
 	if err := s.Firewall.SaveAndApply(cfg); err != nil {
 		// Round-trip the error through a query param so the redirect
 		// pattern is preserved and the operator sees the exact iptables

@@ -150,32 +150,16 @@ func (f *Firewall) applyLocked(cfg models.FirewallConfig) error {
 }
 
 // buildRestorePayload emits the text an `iptables-restore --noflush -T
-// filter` call will accept: reset the chain, then all ACCEPT rules in
-// operator order, then all DROP rules in operator order, then COMMIT.
-//
-// The ACCEPT-before-DROP sort matches the "SIP guard" mental model
-// (allow a few sources, block everything else) and prevents the common
-// footgun of a broad DROP row above a specific ACCEPT making the
-// ACCEPT unreachable. It also means you can't express "ACCEPT this
-// subnet except for one host" in a single chain — accept that; that
-// use case is rare enough to route around by writing rules against
-// specific ports/protocols instead.
-//
-// Rules are stored in operator order on disk (firewall.json) so the UI
-// still shows what they typed. Only the emitted chain is reordered.
+// filter` call will accept: reset the chain, add each rule with its
+// configured action, COMMIT. Rules are emitted in the caller's order
+// — the save path calls models.SortRulesAcceptFirst before persisting,
+// so what we get here is already ACCEPTs-then-DROPs.
 func buildRestorePayload(chain string, rules []models.FirewallRule) string {
 	var b strings.Builder
 	b.WriteString("*filter\n")
 	fmt.Fprintf(&b, ":%s - [0:0]\n", chain)
 	for _, r := range rules {
-		if r.Action != "DROP" {
-			fmt.Fprintf(&b, "-A %s%s\n", chain, ruleArgs(r))
-		}
-	}
-	for _, r := range rules {
-		if r.Action == "DROP" {
-			fmt.Fprintf(&b, "-A %s%s\n", chain, ruleArgs(r))
-		}
+		fmt.Fprintf(&b, "-A %s%s\n", chain, ruleArgs(r))
 	}
 	b.WriteString("COMMIT\n")
 	return b.String()

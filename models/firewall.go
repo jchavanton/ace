@@ -37,8 +37,37 @@ type FirewallRule struct {
 // FirewallConfig is the persisted rule list. Serialized to
 // firewall.json in the state dir. Zero value = no rules (chain is
 // empty, all traffic falls through to INPUT).
+//
+// Rules are stored in the canonical order (ACCEPTs first, then DROPs,
+// each group preserving operator-authored order). See
+// SortRulesAcceptFirst.
 type FirewallConfig struct {
 	Rules []FirewallRule `json:"rules"`
+}
+
+// SortRulesAcceptFirst returns rules reordered so every ACCEPT comes
+// before every DROP, preserving operator-authored order within each
+// group (stable partition). This matches iptables first-match-wins
+// semantics for the "allow a few, deny the rest" use case and
+// prevents the footgun of a broad DROP row above a specific ACCEPT
+// making the ACCEPT unreachable.
+//
+// Rules with any action other than DROP (i.e. empty or ACCEPT) are
+// treated as ACCEPT for sort purposes; Validate() normalizes empty to
+// ACCEPT before this ever runs in the save path.
+func SortRulesAcceptFirst(rules []FirewallRule) []FirewallRule {
+	out := make([]FirewallRule, 0, len(rules))
+	for _, r := range rules {
+		if r.Action != "DROP" {
+			out = append(out, r)
+		}
+	}
+	for _, r := range rules {
+		if r.Action == "DROP" {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // Validate checks the rule is well-formed enough to hand to iptables.
@@ -162,6 +191,11 @@ func firewallConfigPath(stateDir string) string {
 // returns a zero FirewallConfig + nil — the "no rules yet" case.
 // Rules without an explicit action default to ACCEPT on Validate(), so
 // files written by the pre-Action version of ACE load unchanged.
+//
+// Rules are re-sorted through SortRulesAcceptFirst on load so a
+// hand-edited firewall.json (or one written by an older ACE that did
+// no sort) still applies in canonical order. Startup's ApplyPersisted
+// therefore always emits ACCEPTs before DROPs.
 func LoadFirewallConfig(stateDir string) (FirewallConfig, error) {
 	p := firewallConfigPath(stateDir)
 	f, err := os.Open(p)
@@ -176,6 +210,7 @@ func LoadFirewallConfig(stateDir string) (FirewallConfig, error) {
 	if err := json.NewDecoder(f).Decode(&out); err != nil {
 		return FirewallConfig{}, fmt.Errorf("parse %s: %w", p, err)
 	}
+	out.Rules = SortRulesAcceptFirst(out.Rules)
 	return out, nil
 }
 
