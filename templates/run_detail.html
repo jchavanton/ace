@@ -30,6 +30,7 @@
     {{ else }}<span class="badge bg-secondary">{{ .Status }}</span>{{ end }}
   {{ if .SIPPort }} · SIP {{ .SIPPort }}{{ end }}
   {{ if .RTPPortStart }} · RTP {{ .RTPPortStart }}–{{ .RTPPortEnd }}{{ end }}
+  {{ if .TimeoutSeconds }} · timeout {{ .TimeoutSeconds }}s{{ end }}
   {{ if .StartedBy }} · by {{ .StartedBy }}{{ end }}
 </p>
 

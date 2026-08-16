@@ -21,6 +21,8 @@
     <div class="col-auto"><input type="number" form="scenario-form" name="rtp_start" value="{{ .DefaultRTPStart }}" min="1024" max="65535" class="form-control form-control-sm" style="width:6em"></div>
     <div class="col-auto"><span class="small text-muted">–</span></div>
     <div class="col-auto"><input type="number" form="scenario-form" name="rtp_end" value="{{ .DefaultRTPEnd }}" min="1024" max="65535" class="form-control form-control-sm" style="width:6em"></div>
+    <div class="col-auto"><label class="col-form-label small text-muted" title="Wall-clock cap on this run in seconds. 0 = unlimited. Blank = fall back to the runner default.">Timeout (s)</label></div>
+    <div class="col-auto"><input type="number" form="scenario-form" name="timeout_seconds" value="{{ if eq .DefaultTimeout -1 }}0{{ else if .DefaultTimeout }}{{ .DefaultTimeout }}{{ end }}" min="0" max="86400" placeholder="∞" class="form-control form-control-sm" style="width:6em"></div>
     <div class="col-auto">
       <button type="submit" form="scenario-form" class="btn btn-outline-secondary">Save</button>
     </div>

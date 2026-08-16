@@ -221,11 +221,19 @@ func (r *Runner) RecoverOrphanedRuns() (int, error) {
 // plus the public IP it advertises. Zero fields (empty string for
 // PublicAddress) fall back to the runner's config defaults, so a caller
 // that doesn't care can pass a zero Ports{}.
+//
+// TimeoutSeconds encodes three states so a form-side "empty" is
+// distinguishable from an explicit "unlimited":
+//
+//	0  = unset — fall back to scenario override, then to config default
+//	-1 = explicitly unlimited (no controller-side deadline)
+//	>0 = seconds
 type Ports struct {
-	SIP           int
-	RTPPortStart  int
-	RTPPortEnd    int
-	PublicAddress string
+	SIP            int
+	RTPPortStart   int
+	RTPPortEnd     int
+	PublicAddress  string
+	TimeoutSeconds int
 }
 
 // Start kicks off a scenario run and returns the freshly-created Run
@@ -254,12 +262,32 @@ func (r *Runner) Start(scenario *models.Scenario, startedBy string, ports Ports)
 	if publicAddr == "" {
 		publicAddr = r.Cfg.PublicAddress
 	}
+	// Timeout precedence: explicit per-run value → config default.
+	// -1 means "unlimited" and must survive as-is; only ports.TimeoutSeconds == 0
+	// (unset) falls back to the config default. The config default itself uses
+	// 0 to mean unlimited, matching the UI convention.
+	timeoutSecs := ports.TimeoutSeconds
+	if timeoutSecs == 0 {
+		if r.Cfg.DefaultTimeoutSeconds > 0 {
+			timeoutSecs = r.Cfg.DefaultTimeoutSeconds
+		} else {
+			timeoutSecs = -1
+		}
+	}
 
 	// Create the context before taking activeMu so we can register its
-	// cancel with the activeRun record atomically. Same 10-minute
-	// upper bound as before; execute()'s defer calls the same cancel
-	// on the way out to release the timer.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	// cancel with the activeRun record atomically. execute()'s defer
+	// calls the same cancel on the way out to release any timer.
+	// Unlimited runs still get a cancel so Stop() can kill them.
+	var (
+		ctx    context.Context
+		cancel context.CancelFunc
+	)
+	if timeoutSecs > 0 {
+		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(timeoutSecs)*time.Second)
+	} else {
+		ctx, cancel = context.WithCancel(context.Background())
+	}
 
 	// canAllocate + insert must be atomic; two concurrent Starts must
 	// not both pass the check and both register.
@@ -284,6 +312,12 @@ func (r *Runner) Start(scenario *models.Scenario, startedBy string, ports Ports)
 	run.RTPPortStart = rtpStart
 	run.RTPPortEnd = rtpEnd
 	run.PublicAddress = publicAddr
+	// On the Run record we use the simpler UI convention: 0 = unlimited,
+	// positive = seconds. Anyone reading run.json doesn't need to know
+	// about the -1 sentinel used at the config/scenario layer.
+	if timeoutSecs > 0 {
+		run.TimeoutSeconds = timeoutSecs
+	}
 
 	if r.active == nil {
 		r.active = make(map[string]*activeRun)

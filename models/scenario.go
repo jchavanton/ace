@@ -40,15 +40,20 @@ type Scenario struct {
 	Ports ScenarioPorts
 }
 
-// ScenarioPorts is the on-disk shape of a scenario's saved port
-// preferences. Serialized JSON to `<name>.ports.json` next to the
-// scenario XML. Zero fields = unset, so callers can treat a missing
-// file as an empty struct.
+// ScenarioPorts is the on-disk shape of a scenario's saved per-run
+// preferences. Despite the name it also carries the timeout override —
+// keeping one sidecar file (`<name>.ports.json`) avoids a second load
+// path and a migration for existing scenarios. Zero fields = unset, so
+// callers can treat a missing file as an empty struct.
+//
+// TimeoutSeconds: 0 = "not set, use runner default". A saved value of
+// -1 means "unlimited" (no per-run deadline). Positive = seconds.
 type ScenarioPorts struct {
-	SIP           int    `json:"sip,omitempty"`
-	RTPPortStart  int    `json:"rtp_port_start,omitempty"`
-	RTPPortEnd    int    `json:"rtp_port_end,omitempty"`
-	PublicAddress string `json:"public_address,omitempty"`
+	SIP            int    `json:"sip,omitempty"`
+	RTPPortStart   int    `json:"rtp_port_start,omitempty"`
+	RTPPortEnd     int    `json:"rtp_port_end,omitempty"`
+	PublicAddress  string `json:"public_address,omitempty"`
+	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
 }
 
 // PortsPath returns the absolute path to the scenario's sidecar

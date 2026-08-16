@@ -37,6 +37,11 @@
         {{ if .Ports.SIP }}SIP <strong>{{ .Ports.SIP }}</strong>{{ else }}<span class="text-muted">SIP {{ $.DefaultSIPPort }}</span>{{ end }}
         <span class="text-muted"> · </span>
         {{ if .Ports.RTPPortStart }}RTP <strong>{{ .Ports.RTPPortStart }}–{{ .Ports.RTPPortEnd }}</strong>{{ else }}<span class="text-muted">RTP {{ $.DefaultRTPStart }}–{{ $.DefaultRTPEnd }}</span>{{ end }}
+        <span class="text-muted"> · </span>
+        {{ if eq .Ports.TimeoutSeconds -1 }}<strong>∞</strong>
+        {{ else if .Ports.TimeoutSeconds }}<strong>{{ .Ports.TimeoutSeconds }}s</strong>
+        {{ else if $.DefaultTimeout }}<span class="text-muted">{{ $.DefaultTimeout }}s</span>
+        {{ else }}<span class="text-muted">∞</span>{{ end }}
       </td>
       <td class="text-end small text-muted">{{ .SizeBytes }} B</td>
       <td class="small text-muted">{{ .ModTime.Format "2006-01-02 15:04:05" }}</td>

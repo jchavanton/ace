@@ -28,7 +28,10 @@ type Run struct {
 	RTPPortStart  int       `json:"rtp_port_start,omitempty"`
 	RTPPortEnd    int       `json:"rtp_port_end,omitempty"`
 	PublicAddress string    `json:"public_address,omitempty"`
-	FinishedAt    time.Time `json:"finished_at,omitempty"`
+	// TimeoutSeconds is the deadline applied to voip_patrol for this run.
+	// 0 on records written before this field existed. -1 = unlimited.
+	TimeoutSeconds int       `json:"timeout_seconds,omitempty"`
+	FinishedAt     time.Time `json:"finished_at,omitempty"`
 	Status        string    `json:"status"` // running | done | error
 	ExitCode      int       `json:"exit_code"`
 	Error         string    `json:"error,omitempty"` // controller-side errors (non-zero exit, parse fail)

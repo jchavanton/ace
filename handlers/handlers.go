@@ -80,6 +80,7 @@ func (s *Server) handleScenarios(c *gin.Context) {
 		"DefaultSIPPort":  s.Cfg.VoipPatrolPort,
 		"DefaultRTPStart": s.Cfg.RTPPortStart,
 		"DefaultRTPEnd":   s.Cfg.RTPPortEnd,
+		"DefaultTimeout":  s.Cfg.DefaultTimeoutSeconds,
 	})
 }
 
@@ -109,6 +110,15 @@ func (s *Server) handleScenarioDetail(c *gin.Context) {
 	}
 	if scn.Ports.RTPPortEnd != 0 {
 		rtpEndDefault = scn.Ports.RTPPortEnd
+	}
+	// Timeout prefill: scenario override wins over the global default.
+	// The template distinguishes "unset" (empty field, will fall back)
+	// from the -1 sentinel ("unlimited" — the input shows 0). Positive
+	// = seconds. When neither scenario nor config sets a value, the
+	// field starts empty so the operator sees "no cap in effect".
+	timeoutDefault := scn.Ports.TimeoutSeconds
+	if timeoutDefault == 0 && s.Cfg.DefaultTimeoutSeconds > 0 {
+		timeoutDefault = s.Cfg.DefaultTimeoutSeconds
 	}
 	// Effective public IP for the dropdown's initial selection: the
 	// scenario's saved value wins over the global default. Empty means
@@ -152,6 +162,7 @@ func (s *Server) handleScenarioDetail(c *gin.Context) {
 		"DefaultSIPPort":   sipDefault,
 		"DefaultRTPStart":  rtpStartDefault,
 		"DefaultRTPEnd":    rtpEndDefault,
+		"DefaultTimeout":   timeoutDefault,
 		"PublicIPOptions":  ipOptions,
 		"SelectedPublicIP": selectedIP,
 		"LocalIPs":         s.Cfg.LocalIPs,
@@ -202,6 +213,9 @@ func (s *Server) handleRun(c *gin.Context) {
 	}
 	if ports.PublicAddress == "" {
 		ports.PublicAddress = scn.Ports.PublicAddress
+	}
+	if ports.TimeoutSeconds == 0 {
+		ports.TimeoutSeconds = scn.Ports.TimeoutSeconds
 	}
 	run, err := s.Runner.Start(scn, user, ports)
 	if err != nil {
@@ -340,10 +354,11 @@ func (s *Server) handleScenarioSave(c *gin.Context) {
 		return
 	}
 	sp := models.ScenarioPorts{
-		SIP:           ports.SIP,
-		RTPPortStart:  ports.RTPPortStart,
-		RTPPortEnd:    ports.RTPPortEnd,
-		PublicAddress: ports.PublicAddress,
+		SIP:            ports.SIP,
+		RTPPortStart:   ports.RTPPortStart,
+		RTPPortEnd:     ports.RTPPortEnd,
+		PublicAddress:  ports.PublicAddress,
+		TimeoutSeconds: ports.TimeoutSeconds,
 	}
 	if sp == (models.ScenarioPorts{}) {
 		if err := models.DeleteScenarioPorts(s.Cfg.ScenariosDir, name); err != nil {
@@ -468,12 +483,14 @@ func (s *Server) handleRunDelete(c *gin.Context) {
 }
 
 // parsePorts reads the optional sip_port / rtp_start / rtp_end /
-// public_address fields from a Run form. Empty port = 0 = "use config
-// default" (runner does the fallback). Empty public_address = "use
-// scenario-saved or global default". Non-empty port values must parse
-// and be inside the unprivileged-port range; rtp_start must be <=
-// rtp_end when both are set. public_address must parse as an IP.
-// Callers turn a non-nil error into a 400.
+// public_address / timeout_seconds fields from a Run form. Empty port
+// = 0 = "use config default" (runner does the fallback). Empty
+// public_address = "use scenario-saved or global default". Non-empty
+// port values must parse and be inside the unprivileged-port range;
+// rtp_start must be <= rtp_end when both are set. public_address must
+// parse as an IP. timeout_seconds: blank = unset (0); "0" from the UI
+// means "unlimited" and is stored as the -1 sentinel the runner
+// understands. Callers turn a non-nil error into a 400.
 func parsePorts(c *gin.Context) (controller.Ports, error) {
 	var p controller.Ports
 	var err error
@@ -495,7 +512,32 @@ func parsePorts(c *gin.Context) (controller.Ports, error) {
 		}
 		p.PublicAddress = pa
 	}
+	if p.TimeoutSeconds, err = parseTimeoutField(c.PostForm("timeout_seconds")); err != nil {
+		return p, err
+	}
 	return p, nil
+}
+
+// parseTimeoutField turns the timeout_seconds form value into the
+// controller's tri-state int: blank = 0 (unset), "0" = -1 (unlimited),
+// positive = seconds. Negative user input is rejected; the -1 sentinel
+// is only ever produced from an explicit "0".
+func parseTimeoutField(raw string) (int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("timeout_seconds: not a number: %q", raw)
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("timeout_seconds: %d is negative", n)
+	}
+	if n == 0 {
+		return -1, nil
+	}
+	return n, nil
 }
 
 func parsePortField(raw, name string) (int, error) {

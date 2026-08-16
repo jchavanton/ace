@@ -37,6 +37,12 @@ type Config struct {
 	RTPPortStart int
 	RTPPortEnd   int
 
+	// DefaultTimeoutSeconds is the wall-clock cap on any single run
+	// when the scenario doesn't specify its own. 0 = unlimited (no
+	// controller-side deadline; voip_patrol runs until its scenario
+	// completes or crashes). Scenarios can override per-file.
+	DefaultTimeoutSeconds int
+
 	// PublicAddress is the public-side IP voip_patrol advertises in
 	// Contact / Via, set via --public-address. Required when ace runs
 	// behind NAT and the SBC needs to send BYE/re-INVITE back.
@@ -99,6 +105,7 @@ func FromFlags() *Config {
 	flag.IntVar(&c.VoipPatrolPort, "voip-patrol-port", 5093, "default local SIP port voip_patrol binds (per-run override in UI)")
 	flag.IntVar(&c.RTPPortStart, "rtp-port-start", 4000, "default RTP port range start (per-run override in UI)")
 	flag.IntVar(&c.RTPPortEnd, "rtp-port-end", 14000, "default RTP port range end (per-run override in UI)")
+	flag.IntVar(&c.DefaultTimeoutSeconds, "default-timeout-seconds", 0, "default wall-clock cap per run in seconds when the scenario doesn't set one; 0 = unlimited")
 	flag.StringVar(&c.PublicAddress, "public-address", "", "public-side IP for SIP Contact / Via (passed to voip_patrol --ip-addr as the global default)")
 	var localIPsRaw string
 	flag.StringVar(&localIPsRaw, "local-ips", "", "comma-separated list of private IPs to surface in the UI Network dropdown; overrides in-container interface enumeration (needed on cloud VMs where the container's veth isn't the address to advertise)")
