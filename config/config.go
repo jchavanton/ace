@@ -94,6 +94,17 @@ type Config struct {
 	// state is dumped after each apply so a reboot (or iptables-persistent)
 	// can restore it. Typically "/etc/iptables/rules.v4".
 	FirewallSavePath string
+
+	// TLSCert / TLSPrivKey / TLSCAList are absolute paths inside the
+	// container. When TLSCert and TLSPrivKey are both set, the runner
+	// appends --tls-cert / --tls-privkey to every voip_patrol invocation
+	// so scenarios that use transport="tls" can present a cert. TLSCAList
+	// is optional (only needed when the peer's issuer isn't in pjsip's
+	// default trust store, or when --tls-verify-server is used). Empty =
+	// no TLS flags passed; a scenario using TLS will fail at handshake.
+	TLSCert    string
+	TLSPrivKey string
+	TLSCAList  string
 }
 
 // FromFlags parses flags and validates the result. Exits with a clear
@@ -115,6 +126,9 @@ func FromFlags() *Config {
 	flag.StringVar(&c.BasicAuthHtpasswd, "basic-auth-htpasswd", "", "path to htpasswd file (bcrypt); empty = no auth")
 	flag.StringVar(&c.FirewallStateDir, "firewall-state-dir", "", "directory holding firewall.json for the /firewall page; empty disables the page")
 	flag.StringVar(&c.FirewallSavePath, "firewall-save-path", "", "iptables-save target for reboot-persistence (e.g. /etc/iptables/rules.v4); empty = runtime only")
+	flag.StringVar(&c.TLSCert, "tls-cert", "", "TLS certificate file (pem) passed to voip_patrol --tls-cert; needs --tls-privkey to take effect")
+	flag.StringVar(&c.TLSPrivKey, "tls-privkey", "", "TLS private key file (pem) passed to voip_patrol --tls-privkey")
+	flag.StringVar(&c.TLSCAList, "tls-calist", "", "TLS CA list (pem) passed to voip_patrol --tls-calist; optional")
 	flag.Parse()
 
 	// Resolve to absolute paths so the gin handlers don't need to care

@@ -83,4 +83,7 @@ CMD ["/bin/sh", "-c", "exec /usr/local/bin/ace \
     ${ACE_PUBLIC_ADDRESS:+-public-address ${ACE_PUBLIC_ADDRESS}} \
     ${ACE_LOCAL_IPS:+-local-ips ${ACE_LOCAL_IPS}} \
     ${ACE_FIREWALL_SAVE_PATH:+-firewall-save-path ${ACE_FIREWALL_SAVE_PATH}} \
-    ${ACE_BASIC_AUTH_HTPASSWD:+-basic-auth-htpasswd ${ACE_BASIC_AUTH_HTPASSWD}}"]
+    ${ACE_BASIC_AUTH_HTPASSWD:+-basic-auth-htpasswd ${ACE_BASIC_AUTH_HTPASSWD}} \
+    ${ACE_TLS_CERT:+-tls-cert ${ACE_TLS_CERT}} \
+    ${ACE_TLS_PRIVKEY:+-tls-privkey ${ACE_TLS_PRIVKEY}} \
+    ${ACE_TLS_CALIST:+-tls-calist ${ACE_TLS_CALIST}}"]

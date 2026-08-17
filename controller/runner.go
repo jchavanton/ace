@@ -418,6 +418,17 @@ func (r *Runner) execute(ctx context.Context, cancel context.CancelFunc, run *mo
 	case "tcp":
 		args = append(args, "--tcp")
 	}
+	// TLS cert material is passed on every run regardless of the
+	// selected transport — scenarios pick TLS per-action in the XML,
+	// and voip_patrol only uses these files when a TLS transport is
+	// actually created. Both cert and key must be present; CA list is
+	// optional (only needed for --tls-verify-server or non-public CAs).
+	if r.Cfg.TLSCert != "" && r.Cfg.TLSPrivKey != "" {
+		args = append(args, "--tls-cert", r.Cfg.TLSCert, "--tls-privkey", r.Cfg.TLSPrivKey)
+		if r.Cfg.TLSCAList != "" {
+			args = append(args, "--tls-calist", r.Cfg.TLSCAList)
+		}
+	}
 
 	// voip_patrol writes results.json to cwd; recordings go to --record-dir.
 	// We set both to the run dir so every artifact lands bundled per-run.

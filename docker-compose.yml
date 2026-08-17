@@ -59,6 +59,14 @@ services:
       # Empty = runtime-only; the /firewall page still works, but a
       # host reboot loses the chain contents.
       ACE_FIREWALL_SAVE_PATH: "${ACE_FIREWALL_SAVE_PATH:-}"
+      # TLS material passed to voip_patrol on every run (used only when
+      # a scenario picks transport="tls"). Absolute paths *inside the
+      # container*; typically mounted read-only from the host's caddy
+      # cert dir. Empty = no TLS flags passed and TLS scenarios will
+      # fail at handshake.
+      ACE_TLS_CERT:    "${ACE_TLS_CERT:-}"
+      ACE_TLS_PRIVKEY: "${ACE_TLS_PRIVKEY:-}"
+      ACE_TLS_CALIST:  "${ACE_TLS_CALIST:-}"
     volumes:
       - ./scenarios:/data/scenarios:rw
       - ./runs:/data/runs:rw
