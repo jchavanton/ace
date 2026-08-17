@@ -54,6 +54,12 @@ type ScenarioPorts struct {
 	RTPPortEnd     int    `json:"rtp_port_end,omitempty"`
 	PublicAddress  string `json:"public_address,omitempty"`
 	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
+	// Transport restricts which SIP transport voip_patrol listens on.
+	// "" = default (mixed — scenario XML picks per-action), "udp" adds
+	// --udp, "tcp" adds --tcp. "tls" is a saved preference for the UI
+	// but passes no CLI flag: TLS is enabled per-action in the scenario
+	// XML, not toggled at the process level.
+	Transport string `json:"transport,omitempty"`
 }
 
 // PortsPath returns the absolute path to the scenario's sidecar

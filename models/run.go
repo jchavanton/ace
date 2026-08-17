@@ -28,6 +28,10 @@ type Run struct {
 	RTPPortStart  int       `json:"rtp_port_start,omitempty"`
 	RTPPortEnd    int       `json:"rtp_port_end,omitempty"`
 	PublicAddress string    `json:"public_address,omitempty"`
+	// Transport restricts voip_patrol's SIP listen socket for this run.
+	// "" = default (no flag), "udp"/"tcp" pass --udp/--tcp, "tls" is a
+	// saved preference only (per-action TLS in XML).
+	Transport     string    `json:"transport,omitempty"`
 	// TimeoutSeconds is the deadline applied to voip_patrol for this run.
 	// 0 on records written before this field existed. -1 = unlimited.
 	TimeoutSeconds int       `json:"timeout_seconds,omitempty"`

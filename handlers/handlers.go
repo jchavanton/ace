@@ -167,6 +167,10 @@ func (s *Server) handleScenarioDetail(c *gin.Context) {
 		"SelectedPublicIP": selectedIP,
 		"LocalIPs":         s.Cfg.LocalIPs,
 		"DetectedPublicIP": s.Cfg.DetectedPublicIP,
+		// Empty = "no override" (mixed mode — voip_patrol listens on
+		// all transports; scenario XML picks per-action). "udp"/"tcp"
+		// pass --udp/--tcp; "tls" is a saved marker only.
+		"SelectedTransport": scn.Ports.Transport,
 		// HasSavedPorts controls whether the "Reset saved ports" hint
 		// shows next to the Save button.
 		"HasSavedPorts": scn.Ports != (models.ScenarioPorts{}),
@@ -216,6 +220,9 @@ func (s *Server) handleRun(c *gin.Context) {
 	}
 	if ports.TimeoutSeconds == 0 {
 		ports.TimeoutSeconds = scn.Ports.TimeoutSeconds
+	}
+	if ports.Transport == "" {
+		ports.Transport = scn.Ports.Transport
 	}
 	run, err := s.Runner.Start(scn, user, ports)
 	if err != nil {
@@ -359,6 +366,7 @@ func (s *Server) handleScenarioSave(c *gin.Context) {
 		RTPPortEnd:     ports.RTPPortEnd,
 		PublicAddress:  ports.PublicAddress,
 		TimeoutSeconds: ports.TimeoutSeconds,
+		Transport:      ports.Transport,
 	}
 	if sp == (models.ScenarioPorts{}) {
 		if err := models.DeleteScenarioPorts(s.Cfg.ScenariosDir, name); err != nil {
@@ -515,7 +523,26 @@ func parsePorts(c *gin.Context) (controller.Ports, error) {
 	if p.TimeoutSeconds, err = parseTimeoutField(c.PostForm("timeout_seconds")); err != nil {
 		return p, err
 	}
+	if p.Transport, err = parseTransportField(c.PostForm("transport")); err != nil {
+		return p, err
+	}
 	return p, nil
+}
+
+// parseTransportField normalizes the transport form value. Empty (or
+// the explicit "default" placeholder from the select) means "no override"
+// so the scenario-saved value can win. Anything else must be one of
+// udp/tcp/tls; unknown values are rejected instead of silently ignored.
+func parseTransportField(raw string) (string, error) {
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	switch raw {
+	case "", "default":
+		return "", nil
+	case "udp", "tcp", "tls":
+		return raw, nil
+	default:
+		return "", fmt.Errorf("transport: %q not in {udp, tcp, tls}", raw)
+	}
 }
 
 // parseTimeoutField turns the timeout_seconds form value into the

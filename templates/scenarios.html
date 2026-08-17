@@ -42,6 +42,8 @@
         {{ else if .Ports.TimeoutSeconds }}<strong>{{ .Ports.TimeoutSeconds }}s</strong>
         {{ else if $.DefaultTimeout }}<span class="text-muted">{{ $.DefaultTimeout }}s</span>
         {{ else }}<span class="text-muted">∞</span>{{ end }}
+        <span class="text-muted"> · </span>
+        {{ if .Ports.Transport }}<strong>{{ .Ports.Transport }}</strong>{{ else }}<span class="text-muted">default</span>{{ end }}
       </td>
       <td class="text-end small text-muted">{{ .SizeBytes }} B</td>
       <td class="small text-muted">{{ .ModTime.Format "2006-01-02 15:04:05" }}</td>

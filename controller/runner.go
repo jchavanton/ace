@@ -234,6 +234,10 @@ type Ports struct {
 	RTPPortEnd     int
 	PublicAddress  string
 	TimeoutSeconds int
+	// Transport is "" (default), "udp", "tcp", or "tls". udp/tcp map
+	// to voip_patrol's --udp/--tcp listen-restriction flags; tls and ""
+	// pass no flag (TLS is enabled per-action in the scenario XML).
+	Transport string
 }
 
 // Start kicks off a scenario run and returns the freshly-created Run
@@ -312,6 +316,7 @@ func (r *Runner) Start(scenario *models.Scenario, startedBy string, ports Ports)
 	run.RTPPortStart = rtpStart
 	run.RTPPortEnd = rtpEnd
 	run.PublicAddress = publicAddr
+	run.Transport = ports.Transport
 	// On the Run record we use the simpler UI convention: 0 = unlimited,
 	// positive = seconds. Anyone reading run.json doesn't need to know
 	// about the -1 sentinel used at the config/scenario layer.
@@ -402,6 +407,16 @@ func (r *Runner) execute(ctx context.Context, cancel context.CancelFunc, run *mo
 	}
 	if run.PublicAddress != "" {
 		args = append(args, "--ip-addr", run.PublicAddress)
+	}
+	// voip_patrol's transport flags are listen-restrictions, not
+	// preferences: --udp/--tcp disable the other UDP/TCP listener. TLS
+	// has no CLI toggle — it's enabled per-action in the scenario XML,
+	// so "tls" here is a UI marker that doesn't add an arg.
+	switch run.Transport {
+	case "udp":
+		args = append(args, "--udp")
+	case "tcp":
+		args = append(args, "--tcp")
 	}
 
 	// voip_patrol writes results.json to cwd; recordings go to --record-dir.
