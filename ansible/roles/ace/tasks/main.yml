@@ -114,9 +114,14 @@
     rsync_opts:
       - "--exclude=runs/*"
       - "--exclude=scenarios/*"   # operator's scenarios stay sovereign
+      - "--exclude=firewall/*"    # root-owned runtime state (container writes as root)
       - "--exclude=.git"
       - "--exclude=ace"           # built binary; the image rebuild does its own
       - "--exclude=ansible"       # don't ship the playbook into the build context
+      # Container writes root-owned files into bind-mounted dirs
+      # (firewall/, runs/, scenarios/). --archive would try to utime()
+      # those dirs and fail as the non-root SSH user; skip dir times.
+      - "--omit-dir-times"
     times: true
 
 # Only ship voip_patrol source when the target is going to build it —
