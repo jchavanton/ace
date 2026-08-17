@@ -89,4 +89,16 @@ ace_gcp_hosts:
       ace_rtp_port_end: 14000
 
       ace_auth_enabled: false
+
+      # Reuse Caddy's Let's Encrypt cert for voip_patrol TLS. Caddy
+      # (in the authelia-stack next to ace) renews it automatically;
+      # the docker volume path is stable while that stack exists. The
+      # cert is issued for ace.netic.ravenrtc.com — fine as a client
+      # cert (peer doesn't validate our CN); if we ever need to receive
+      # TLS calls under a different SIP identity, swap this for a
+      # dedicated cert. Empty ace_tls_host_cert_dir disables the mount.
+      ace_tls_host_cert_dir: "/var/lib/docker/volumes/authelia-stack_caddy_data/_data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/ace.netic.ravenrtc.com"
+      ace_tls_container_cert_dir: "/tls"
+      ace_tls_cert_file: "ace.netic.ravenrtc.com.crt"
+      ace_tls_privkey_file: "ace.netic.ravenrtc.com.key"
       ace_basic_auth_users: []

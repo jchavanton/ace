@@ -161,6 +161,30 @@
     regexp: '^(\s*)additional_contexts:\s*\n((\1\s+.*\n)|(\s*#.*\n)|(\s*\n))*'
     replace: ''
 
+# TLS cert bind-mount. When ace_tls_host_cert_dir is set on the host,
+# render a docker-compose.override.yml that mounts that dir read-only
+# into the ace container. The env vars in .env then point ace at the
+# cert/key files inside that mount. Absent = remove any stale override
+# so a previous TLS setup doesn't leak into a de-configured host.
+- name: Render docker-compose.override.yml (TLS mount)
+  become: true
+  ansible.builtin.template:
+    src: docker-compose.override.yml.j2
+    dest: "{{ ace_install_dir }}/docker-compose.override.yml"
+    owner: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
+    group: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
+    mode: '0644'
+  when: ace_tls_host_cert_dir | default('') != ''
+  notify: restart ace
+
+- name: Remove docker-compose.override.yml when TLS not configured
+  become: true
+  ansible.builtin.file:
+    path: "{{ ace_install_dir }}/docker-compose.override.yml"
+    state: absent
+  when: ace_tls_host_cert_dir | default('') == ''
+  notify: restart ace
+
 # Per-host overrides for the compose stack. The .env file is the only
 # place a deployer should need to set values; the compose file itself
 # reads them with ${VAR:-default} so changes don't require editing it.

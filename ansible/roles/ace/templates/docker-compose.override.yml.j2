@@ -1,0 +1,13 @@
+# Rendered by ansible when ace_tls_host_cert_dir is set. Do not
+# hand-edit; changes will be overwritten on the next playbook run.
+#
+# Docker Compose merges override files on top of docker-compose.yml,
+# so this adds a read-only mount of the host cert dir into the ace
+# container. Env vars are still driven by .env; this file only carries
+# the mount because the tracked compose file can't hardcode a
+# host-specific path.
+
+services:
+  ace:
+    volumes:
+      - {{ ace_tls_host_cert_dir }}:{{ ace_tls_container_cert_dir | default('/tls') }}:ro
