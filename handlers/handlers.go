@@ -69,11 +69,7 @@ func (s *Server) handleScenarios(c *gin.Context) {
 		"Scenarios":       scenarios,
 		"RecentRuns":      runs,
 		"ActiveRuns":      s.Runner.ActiveRuns(),
-		// DefaultsBusy gates the list-view "Run" button, which submits
-		// without per-run overrides. If the runner's default ports are
-		// occupied, that button would just 409 — disable it up front.
-		"DefaultsBusy": s.Runner.DefaultPortsInUse(),
-		"ScenariosDir": s.Cfg.ScenariosDir,
+		"ScenariosDir":    s.Cfg.ScenariosDir,
 		// Global defaults, shown greyed-out in the Ports column for
 		// scenarios without saved overrides so users see what the
 		// list-view "Run" button would actually use.

@@ -99,25 +99,6 @@ func (r *Runner) IsScenarioRunning(scenario string) bool {
 	return false
 }
 
-// DefaultPortsInUse reports whether any active run occupies the
-// runner's default SIP port or overlaps its default RTP range. The
-// scenarios-list "Run" button uses this to decide whether to gray
-// itself out — since that button submits without per-run overrides,
-// starting it while defaults are taken would just 409.
-func (r *Runner) DefaultPortsInUse() bool {
-	r.activeMu.Lock()
-	defer r.activeMu.Unlock()
-	for _, a := range r.active {
-		if a.sipPort == r.Cfg.VoipPatrolPort {
-			return true
-		}
-		if rangesOverlap(a.rtpPortStart, a.rtpPortEnd, r.Cfg.RTPPortStart, r.Cfg.RTPPortEnd) {
-			return true
-		}
-	}
-	return false
-}
-
 // canAllocate returns nil iff the requested ports don't overlap with
 // any currently-active run. Called under activeMu (the caller holds
 // it and immediately registers the run on success — the check + insert
@@ -341,7 +322,7 @@ func (r *Runner) Start(scenario *models.Scenario, startedBy string, ports Ports)
 
 	// Persist the running-state record so the UI can show it
 	// immediately after the redirect. Done after registering in the
-	// active map so IsScenarioRunning / DefaultPortsInUse see it
+	// active map so IsScenarioRunning sees it
 	// consistently.
 	if err := run.Save(r.Cfg.RunsDir); err != nil {
 		r.activeMu.Lock()
