@@ -21,7 +21,7 @@
 # locally instead, swap this back to the debian:trixie source-build flow
 # from the git history (the additional_contexts wiring in docker-compose.yml
 # is preserved for that path).
-FROM jchavanton/voip_patrol:0.10.1 AS voip_patrol_builder
+FROM jchavanton/voip_patrol:0.10.1-ace1 AS voip_patrol_builder
 
 # --- Stage 2: ace -------------------------------------------------------------
 FROM golang:1.22-bookworm AS ace_builder
