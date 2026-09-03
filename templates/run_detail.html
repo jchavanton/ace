@@ -67,7 +67,7 @@
 <div class="table-responsive">
 <table class="table table-sm align-middle">
   <thead><tr>
-    <th>#</th><th>Result</th><th>Cause</th><th>Reason</th><th class="text-end">Dur</th>
+    <th>#</th><th>Start</th><th>Result</th><th>Cause</th><th>Reason</th><th class="text-end">Dur</th>
     <th class="text-end">100</th><th class="text-end">180</th><th class="text-end">200</th>
     <th class="text-end">MOS Rx/Tx</th><th>Call-ID</th>
   </tr></thead>
@@ -75,6 +75,7 @@
   {{ range $i, $c := .Calls }}
     <tr>
       <td>{{ $i }}</td>
+      <td class="small text-muted">{{ $c.Start }}</td>
       <td>
         {{ if eq $c.Result "PASS" }}<span class="badge bg-success">PASS</span>
         {{ else }}<span class="badge bg-danger">FAIL</span>{{ end }}
