@@ -105,7 +105,11 @@
 
 # Source code → target. Use rsync (synchronize module) so re-deploys
 # only ship the delta. The build context for ace is the install dir.
+# LAN install dir is root-owned; become: true makes synchronize pass
+# --rsync-path='sudo -u root rsync' so the remote rsync runs as root.
+# GCP dir is user-owned so no escalation needed.
 - name: Ship ace source to host
+  become: "{{ ace_cloud | default('') != 'gcp' }}"
   ansible.posix.synchronize:
     src: "{{ ace_source_dir }}/"
     dest: "{{ ace_install_dir }}/"
@@ -130,6 +134,7 @@
 # checkout isn't needed there.
 - name: Ship voip_patrol source to host
   when: not (ace_use_prebuilt_voip_patrol | default(false))
+  become: "{{ ace_cloud | default('') != 'gcp' }}"
   ansible.posix.synchronize:
     src: "{{ voip_patrol_source_dir }}/"
     dest: "{{ ace_install_dir }}/../voip_patrol/"
