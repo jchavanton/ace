@@ -22,7 +22,7 @@
 <p class="small text-muted">
   <code>{{ .ID }}</code> ·
   {{ .StartedAt.Format "2006-01-02 15:04:05" }}
-  {{ if not .FinishedAt.IsZero }} → {{ .FinishedAt.Format "15:04:05" }}{{ end }}
+  {{ if not .FinishedAt.IsZero }} → {{ .FinishedAt.Format "2006-01-02 15:04:05" }}{{ end }}
   · exit {{ .ExitCode }}
   · {{ if eq .Status "done" }}<span class="badge bg-success">done</span>
     {{ else if eq .Status "error" }}<span class="badge bg-danger">error</span>
