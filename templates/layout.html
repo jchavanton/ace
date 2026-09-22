@@ -19,6 +19,12 @@
     <ul class="navbar-nav me-auto">
       <li class="nav-item"><a class="nav-link {{ if eq .Page "scenarios" }}active{{ end }}" href="/scenarios">Scenarios</a></li>
       <li class="nav-item"><a class="nav-link {{ if eq .Page "runs" }}active{{ end }}" href="/runs">Runs</a></li>
+      <li class="nav-item">
+        <a class="nav-link {{ if eq .Page "bots" }}active{{ end }}" href="/bots">
+          Bots
+          {{ if .UnackedAlerts }}<span class="badge bg-danger ms-1">{{ .UnackedAlerts }}</span>{{ end }}
+        </a>
+      </li>
       <li class="nav-item"><a class="nav-link {{ if eq .Page "firewall" }}active{{ end }}" href="/firewall">Firewall</a></li>
     </ul>
     {{ if .Busy }}<span class="badge bg-warning text-dark">run in progress</span>{{ end }}
@@ -30,6 +36,7 @@
 {{- else if eq .ContentTemplate "content_runs" -}}         {{ template "content_runs" . }}
 {{- else if eq .ContentTemplate "content_run_detail" -}}   {{ template "content_run_detail" . }}
 {{- else if eq .ContentTemplate "content_firewall" -}}     {{ template "content_firewall" . }}
+{{- else if eq .ContentTemplate "content_bots" -}}         {{ template "content_bots" . }}
 {{- end -}}
 </main>
 </body>

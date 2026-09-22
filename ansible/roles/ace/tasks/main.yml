@@ -118,6 +118,7 @@
     rsync_opts:
       - "--exclude=runs/*"
       - "--exclude=scenarios/*"   # operator's scenarios stay sovereign
+      - "--exclude=bots/*"        # per-host bot schedules + alerts stay sovereign
       - "--exclude=firewall/*"    # root-owned runtime state (container writes as root)
       - "--exclude=.git"
       - "--exclude=ace"           # built binary; the image rebuild does its own
@@ -218,6 +219,15 @@
   become: true
   ansible.builtin.file:
     path: "{{ ace_install_dir }}/runs"
+    state: directory
+    owner: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
+    group: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
+    mode: '0755'
+
+- name: Ensure bots dir exists
+  become: true
+  ansible.builtin.file:
+    path: "{{ ace_install_dir }}/bots"
     state: directory
     owner: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
     group: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"

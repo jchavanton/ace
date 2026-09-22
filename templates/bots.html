@@ -1,0 +1,116 @@
+{{ define "content_bots" }}
+<h1 class="h3 mb-4">Bots</h1>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <h2 class="h5">Scheduled</h2>
+    {{ if .Bots }}
+    <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead><tr>
+        <th>Name</th><th>Scenario</th><th class="text-end">Every</th>
+        <th>Status</th><th>Last run</th><th>Next</th><th></th>
+      </tr></thead>
+      <tbody>
+      {{ range .Bots }}
+        <tr>
+          <td class="font-monospace">{{ .Name }}</td>
+          <td><a href="/scenarios/{{ .Scenario }}">{{ .Scenario }}</a></td>
+          <td class="text-end small text-muted">{{ .IntervalMinutes }} min</td>
+          <td>
+            {{ if not .Enabled }}<span class="badge bg-secondary">paused</span>
+            {{ else if eq .LastStatus "done" }}<span class="badge bg-success">ok</span>
+            {{ else if eq .LastStatus "running" }}<span class="badge bg-warning text-dark">running</span>
+            {{ else if eq .LastStatus "fail" }}<span class="badge bg-danger">fail</span>
+            {{ else if eq .LastStatus "error" }}<span class="badge bg-danger">error</span>
+            {{ else if eq .LastStatus "stopped" }}<span class="badge bg-warning text-dark">stopped</span>
+            {{ else }}<span class="badge bg-light text-dark">idle</span>{{ end }}
+          </td>
+          <td class="small text-muted">
+            {{ if .LastRunID }}<a href="/runs/{{ .LastRunID }}" class="font-monospace">{{ .LastRunID }}</a>{{ end }}
+          </td>
+          <td class="small text-muted">
+            {{ if and .Enabled (not .NextRunAt.IsZero) }}{{ .NextRunAt.Format "2006-01-02 15:04:05" }}{{ end }}
+          </td>
+          <td class="text-end">
+            <form method="post" action="/bots/{{ .Name }}/run" class="d-inline">
+              <button class="btn btn-sm btn-outline-primary">Run</button>
+            </form>
+            <form method="post" action="/bots/{{ .Name }}/toggle" class="d-inline">
+              <button class="btn btn-sm btn-outline-secondary">{{ if .Enabled }}Pause{{ else }}Enable{{ end }}</button>
+            </form>
+            <form method="post" action="/bots/{{ .Name }}/delete" class="d-inline"
+                  onsubmit="return confirm('Delete bot {{ .Name }}?');">
+              <button class="btn btn-sm btn-outline-danger">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {{ end }}
+      </tbody>
+    </table>
+    </div>
+    {{ else }}
+    <p class="text-muted">No bots yet. Add one on the right.</p>
+    {{ end }}
+
+    <h2 class="h5 mt-4">Alerts</h2>
+    {{ if .Alerts }}
+    <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead><tr>
+        <th></th><th>When</th><th>Bot</th><th>Run</th><th>Reason</th><th></th>
+      </tr></thead>
+      <tbody>
+      {{ range .Alerts }}
+        <tr class="{{ if not .Acked }}table-danger{{ end }}">
+          <td>{{ if .Acked }}<span class="badge bg-secondary">acked</span>{{ else }}<span class="badge bg-danger">new</span>{{ end }}</td>
+          <td class="small text-muted">{{ .At.Format "2006-01-02 15:04:05" }}</td>
+          <td class="font-monospace">{{ .Bot }}</td>
+          <td><a href="/runs/{{ .RunID }}" class="font-monospace small">{{ .RunID }}</a></td>
+          <td class="small">{{ .Reason }}</td>
+          <td class="text-end">
+            {{ if not .Acked }}
+            <form method="post" action="/alerts/{{ .ID }}/ack" class="d-inline">
+              <button class="btn btn-sm btn-outline-secondary">Ack</button>
+            </form>
+            {{ end }}
+          </td>
+        </tr>
+      {{ end }}
+      </tbody>
+    </table>
+    </div>
+    {{ else }}
+    <p class="text-muted">No alerts.</p>
+    {{ end }}
+  </div>
+
+  <div class="col-lg-4">
+    <h2 class="h5">New bot</h2>
+    <form method="post" action="/bots" class="card card-body">
+      <div class="mb-2">
+        <label class="form-label small">Name</label>
+        <input name="name" class="form-control form-control-sm font-monospace" required
+               pattern="[A-Za-z0-9_-]+" maxlength="64" placeholder="e.g. nightly">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small">Scenario</label>
+        <select name="scenario" class="form-select form-select-sm" required>
+          <option value="">-- pick one --</option>
+          {{ range .Scenarios }}<option value="{{ .Name }}">{{ .Name }}</option>{{ end }}
+        </select>
+      </div>
+      <div class="mb-2">
+        <label class="form-label small">Interval (minutes)</label>
+        <input type="number" name="interval_minutes" min="1" max="10080" value="60"
+               class="form-control form-control-sm" required>
+      </div>
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="enabled" id="botEnabled" checked>
+        <label class="form-check-label small" for="botEnabled">Enable now</label>
+      </div>
+      <button class="btn btn-sm btn-primary">Add bot</button>
+    </form>
+  </div>
+</div>
+{{ end }}

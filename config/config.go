@@ -55,6 +55,11 @@ type Config struct {
 	// timestamped subdir per run; results.json + captured WAVs go there.
 	RunsDir string
 
+	// BotsDir holds one JSON file per scheduled bot plus the shared
+	// alerts.json. Empty falls back to $RunsDir/../bots so a fresh
+	// install with just -runs-dir works without extra flags.
+	BotsDir string
+
 	// VoiceRefDir is the source dir for voip_patrol's reference WAV
 	// files. Scenarios reference these by relative path (e.g.
 	// "voice_ref_files/reference_8000.wav"), which voip_patrol
@@ -122,6 +127,7 @@ func FromFlags() *Config {
 	flag.StringVar(&localIPsRaw, "local-ips", "", "comma-separated list of private IPs to surface in the UI Network dropdown; overrides in-container interface enumeration (needed on cloud VMs where the container's veth isn't the address to advertise)")
 	flag.StringVar(&c.ScenariosDir, "scenarios-dir", "./scenarios", "directory holding scenario XML files")
 	flag.StringVar(&c.RunsDir, "runs-dir", "./runs", "directory where per-run output lands")
+	flag.StringVar(&c.BotsDir, "bots-dir", "./bots", "directory holding bot JSON files and alerts.json")
 	flag.StringVar(&c.VoiceRefDir, "voice-ref-dir", "/voice_ref_files", "source dir for voip_patrol reference WAVs; symlinked into each run dir as 'voice_ref_files'. Empty disables.")
 	flag.StringVar(&c.BasicAuthHtpasswd, "basic-auth-htpasswd", "", "path to htpasswd file (bcrypt); empty = no auth")
 	flag.StringVar(&c.FirewallStateDir, "firewall-state-dir", "", "directory holding firewall.json for the /firewall page; empty disables the page")
@@ -133,7 +139,7 @@ func FromFlags() *Config {
 
 	// Resolve to absolute paths so the gin handlers don't need to care
 	// about the controller's cwd at request time.
-	for _, p := range []*string{&c.ScenariosDir, &c.RunsDir} {
+	for _, p := range []*string{&c.ScenariosDir, &c.RunsDir, &c.BotsDir} {
 		abs, err := filepath.Abs(*p)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ace: bad path %q: %v\n", *p, err)
@@ -144,7 +150,7 @@ func FromFlags() *Config {
 
 	// Ensure the dirs exist; this is a fresh-install convenience —
 	// later runs will hit them whether or not we created them today.
-	for _, p := range []string{c.ScenariosDir, c.RunsDir} {
+	for _, p := range []string{c.ScenariosDir, c.RunsDir, c.BotsDir} {
 		if err := os.MkdirAll(p, 0o755); err != nil {
 			fmt.Fprintf(os.Stderr, "ace: mkdir %s: %v\n", p, err)
 			os.Exit(2)

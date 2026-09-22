@@ -22,7 +22,7 @@ func (s *Server) handleFirewall(c *gin.Context) {
 	cfg, loadErr := s.Firewall.Load()
 	msg := c.Query("msg")
 	errMsg := c.Query("err")
-	c.HTML(http.StatusOK, "layout", gin.H{
+	s.render(c, http.StatusOK, gin.H{
 		"Title":           "Firewall",
 		"Page":            "firewall",
 		"ContentTemplate": "content_firewall",

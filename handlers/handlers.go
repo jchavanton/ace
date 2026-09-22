@@ -46,10 +46,27 @@ func (s *Server) Register(r *gin.Engine) {
 	r.POST("/runs/:id/delete", s.handleRunDelete)
 	r.GET("/firewall", s.handleFirewall)
 	r.POST("/firewall", s.handleFirewallSave)
+	r.GET("/bots", s.handleBots)
+	r.POST("/bots", s.handleBotCreate)
+	r.POST("/bots/:name", s.handleBotUpdate)
+	r.POST("/bots/:name/toggle", s.handleBotToggle)
+	r.POST("/bots/:name/delete", s.handleBotDelete)
+	r.POST("/bots/:name/run", s.handleBotRun)
+	r.POST("/alerts/:id/ack", s.handleAlertAck)
 }
 
 func (s *Server) handleIndex(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/scenarios")
+}
+
+// render wraps c.HTML with the shared layout data (the navbar's
+// unacked-alert badge). Every page-rendering handler goes through here
+// so the count stays consistent across tabs.
+func (s *Server) render(c *gin.Context, status int, data gin.H) {
+	if _, ok := data["UnackedAlerts"]; !ok {
+		data["UnackedAlerts"] = models.UnackedAlertCount(s.Cfg.BotsDir)
+	}
+	c.HTML(status, "layout", data)
 }
 
 func (s *Server) handleScenarios(c *gin.Context) {
@@ -62,7 +79,7 @@ func (s *Server) handleScenarios(c *gin.Context) {
 	if len(runs) > 5 {
 		runs = runs[:5]
 	}
-	c.HTML(http.StatusOK, "layout", gin.H{
+	s.render(c, http.StatusOK, gin.H{
 		"Title":           "Scenarios",
 		"Page":            "scenarios",
 		"ContentTemplate": "content_scenarios",
@@ -144,7 +161,7 @@ func (s *Server) handleScenarioDetail(c *gin.Context) {
 	}
 	add(s.Cfg.DetectedPublicIP)
 	add(selectedIP)
-	c.HTML(http.StatusOK, "layout", gin.H{
+	s.render(c, http.StatusOK, gin.H{
 		"Title":           scn.Name,
 		"Page":            "scenarios",
 		"ContentTemplate": "content_scenario_detail",
@@ -234,7 +251,7 @@ func (s *Server) handleRuns(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "list runs: %v", err)
 		return
 	}
-	c.HTML(http.StatusOK, "layout", gin.H{
+	s.render(c, http.StatusOK, gin.H{
 		"Title":           "Runs",
 		"Page":            "runs",
 		"ContentTemplate": "content_runs",
@@ -253,7 +270,7 @@ func (s *Server) handleRunDetail(c *gin.Context) {
 	// can show what's happening live. ReadFile error is ignored — empty
 	// log is the running-but-no-output-yet state.
 	logBytes, _ := os.ReadFile(filepath.Join(run.Dir(s.Cfg.RunsDir), "stdout.log"))
-	c.HTML(http.StatusOK, "layout", gin.H{
+	s.render(c, http.StatusOK, gin.H{
 		"Title":           "Run " + run.ID,
 		"Page":            "runs",
 		"ContentTemplate": "content_run_detail",

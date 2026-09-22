@@ -32,6 +32,13 @@ type Runner struct {
 
 	activeMu sync.Mutex
 	active   map[string]*activeRun // keyed by Run.ID
+
+	// OnFinish, if set, is invoked from the run's goroutine after
+	// run.json has been persisted with its terminal status. Used by the
+	// bot scheduler to react to scheduled-run outcomes without polling.
+	// Errors thrown by the callback are swallowed — this hook is
+	// best-effort observability.
+	OnFinish func(*models.Run)
 }
 
 // activeRun is the in-memory record of a currently-executing run.
@@ -240,6 +247,13 @@ type Ports struct {
 // itself never returns an error — failures land in run.Status /
 // run.Error inside run.json.
 func (r *Runner) Start(scenario *models.Scenario, startedBy string, ports Ports) (*models.Run, error) {
+	return r.StartWithTrigger(scenario, startedBy, "", ports)
+}
+
+// StartWithTrigger is Start with an explicit "triggered_by" tag stored
+// on the run (e.g. "bot:nightly"). Interactive callers use Start (blank
+// trigger); the bot scheduler passes its bot name here.
+func (r *Runner) StartWithTrigger(scenario *models.Scenario, startedBy, triggeredBy string, ports Ports) (*models.Run, error) {
 	sip := firstNonZero(ports.SIP, r.Cfg.VoipPatrolPort)
 	rtpStart := firstNonZero(ports.RTPPortStart, r.Cfg.RTPPortStart)
 	rtpEnd := firstNonZero(ports.RTPPortEnd, r.Cfg.RTPPortEnd)
@@ -290,6 +304,7 @@ func (r *Runner) Start(scenario *models.Scenario, startedBy string, ports Ports)
 		return nil, fmt.Errorf("new run: %w", err)
 	}
 	run.StartedBy = startedBy
+	run.TriggeredBy = triggeredBy
 	// Record the effective ports (after fallback) on the run itself so
 	// the detail page can show what voip_patrol actually bound and old
 	// runs remain distinguishable after a config change.
@@ -470,6 +485,10 @@ func (r *Runner) execute(ctx context.Context, cancel context.CancelFunc, run *mo
 	}
 
 	_ = run.Save(r.Cfg.RunsDir)
+
+	if r.OnFinish != nil {
+		r.OnFinish(run)
+	}
 }
 
 // loadVoipPatrolResults reads voip_patrol's results.json. The file is

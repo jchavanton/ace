@@ -66,6 +66,7 @@ ENV ACE_ADDR=0.0.0.0:8086 \
     ACE_VOIP_PATROL_BIN=/usr/local/bin/voip_patrol \
     ACE_SCENARIOS_DIR=/data/scenarios \
     ACE_RUNS_DIR=/data/runs \
+    ACE_BOTS_DIR=/data/bots \
     ACE_FIREWALL_STATE_DIR=/data/firewall
 
 # Translate the env-var contract into flags. Public address is
@@ -79,6 +80,7 @@ CMD ["/bin/sh", "-c", "exec /usr/local/bin/ace \
     -rtp-port-end ${ACE_RTP_PORT_END:-14000} \
     -scenarios-dir ${ACE_SCENARIOS_DIR} \
     -runs-dir ${ACE_RUNS_DIR} \
+    -bots-dir ${ACE_BOTS_DIR} \
     -firewall-state-dir ${ACE_FIREWALL_STATE_DIR} \
     ${ACE_PUBLIC_ADDRESS:+-public-address ${ACE_PUBLIC_ADDRESS}} \
     ${ACE_LOCAL_IPS:+-local-ips ${ACE_LOCAL_IPS}} \

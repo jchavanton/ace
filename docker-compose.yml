@@ -70,6 +70,9 @@ services:
     volumes:
       - ./scenarios:/data/scenarios:rw
       - ./runs:/data/runs:rw
+      # Bots + alerts.json persist here so schedules survive container
+      # restarts. ace creates <name>.json + alerts.json on demand.
+      - ./bots:/data/bots:rw
       # Bind-mount ./auth as read-only. Present-but-empty when auth is
       # off; ace only reads the file when ACE_BASIC_AUTH_HTPASSWD is set.
       - ./auth:/data/auth:ro

@@ -22,6 +22,9 @@ type Run struct {
 	Scenario  string    `json:"scenario"` // scenario name
 	StartedAt time.Time `json:"started_at"`
 	StartedBy string    `json:"started_by,omitempty"` // authenticated email from oauth2-proxy; empty when auth is off
+	// TriggeredBy names the scheduler that fired this run, when it wasn't
+	// operator-initiated. Format: "bot:<name>". Empty for interactive runs.
+	TriggeredBy string `json:"triggered_by,omitempty"`
 	// Ports actually used for this run. Zero on older runs recorded
 	// before this field existed — treat as "config default at the time".
 	SIPPort       int       `json:"sip_port,omitempty"`
