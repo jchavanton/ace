@@ -53,6 +53,9 @@ func (s *Server) Register(r *gin.Engine) {
 	r.POST("/bots/:name/delete", s.handleBotDelete)
 	r.POST("/bots/:name/run", s.handleBotRun)
 	r.POST("/alerts/:id/ack", s.handleAlertAck)
+	r.GET("/alerts", s.handleAlerts)
+	r.POST("/alerts/config", s.handleAlertConfigSave)
+	r.POST("/alerts/test", s.handleAlertTest)
 }
 
 func (s *Server) handleIndex(c *gin.Context) {
@@ -65,6 +68,10 @@ func (s *Server) handleIndex(c *gin.Context) {
 func (s *Server) render(c *gin.Context, status int, data gin.H) {
 	if _, ok := data["UnackedAlerts"]; !ok {
 		data["UnackedAlerts"] = models.UnackedAlertCount(s.Cfg.BotsDir)
+	}
+	if _, ok := data["FiringCount"]; !ok {
+		firing, _ := models.FiringBots(s.Cfg.BotsDir)
+		data["FiringCount"] = len(firing)
 	}
 	c.HTML(status, "layout", data)
 }

@@ -25,6 +25,12 @@
           {{ if .UnackedAlerts }}<span class="badge bg-danger ms-1">{{ .UnackedAlerts }}</span>{{ end }}
         </a>
       </li>
+      <li class="nav-item">
+        <a class="nav-link {{ if eq .Page "alerts" }}active{{ end }}" href="/alerts">
+          Alerts
+          {{ if .FiringCount }}<span class="badge bg-danger ms-1">{{ .FiringCount }}</span>{{ end }}
+        </a>
+      </li>
       <li class="nav-item"><a class="nav-link {{ if eq .Page "firewall" }}active{{ end }}" href="/firewall">Firewall</a></li>
     </ul>
     {{ if .Busy }}<span class="badge bg-warning text-dark">run in progress</span>{{ end }}
@@ -37,6 +43,7 @@
 {{- else if eq .ContentTemplate "content_run_detail" -}}   {{ template "content_run_detail" . }}
 {{- else if eq .ContentTemplate "content_firewall" -}}     {{ template "content_firewall" . }}
 {{- else if eq .ContentTemplate "content_bots" -}}         {{ template "content_bots" . }}
+{{- else if eq .ContentTemplate "content_alerts" -}}       {{ template "content_alerts" . }}
 {{- end -}}
 </main>
 </body>

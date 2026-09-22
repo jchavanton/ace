@@ -1,0 +1,99 @@
+{{ define "content_alerts" }}
+<h1 class="h3 mb-4">Alerts</h1>
+
+{{ if .TestMessage }}
+<div class="alert {{ if eq .TestMessage "sent" }}alert-success{{ else }}alert-danger{{ end }}" role="alert">
+  Test send: {{ .TestMessage }}
+</div>
+{{ end }}
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <h2 class="h5">Firing now</h2>
+    {{ if .Firing }}
+    <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead><tr>
+        <th>Bot</th><th>Since</th><th>Consecutive fails</th><th>Last run</th><th>Reason</th>
+      </tr></thead>
+      <tbody>
+      {{ range .Firing }}
+        <tr class="table-danger">
+          <td class="font-monospace">{{ .Bot }}</td>
+          <td class="small text-muted">{{ .State.LastAt.Format "2006-01-02 15:04:05" }}</td>
+          <td class="text-end">{{ .State.ConsecutiveFails }}</td>
+          <td>{{ if .State.LastRunID }}<a href="/runs/{{ .State.LastRunID }}" class="font-monospace small">{{ .State.LastRunID }}</a>{{ end }}</td>
+          <td class="small">{{ .State.LastReason }}</td>
+        </tr>
+      {{ end }}
+      </tbody>
+    </table>
+    </div>
+    {{ else }}
+    <p class="text-muted">Nothing firing.</p>
+    {{ end }}
+
+    <h2 class="h5 mt-4">History</h2>
+    {{ if .Alerts }}
+    <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead><tr>
+        <th>When</th><th>Bot</th><th>Run</th><th>Reason</th>
+      </tr></thead>
+      <tbody>
+      {{ range .Alerts }}
+        <tr>
+          <td class="small text-muted">{{ .At.Format "2006-01-02 15:04:05" }}</td>
+          <td class="font-monospace">{{ .Bot }}</td>
+          <td><a href="/runs/{{ .RunID }}" class="font-monospace small">{{ .RunID }}</a></td>
+          <td class="small">{{ .Reason }}</td>
+        </tr>
+      {{ end }}
+      </tbody>
+    </table>
+    </div>
+    {{ else }}
+    <p class="text-muted">No alerts yet.</p>
+    {{ end }}
+  </div>
+
+  <div class="col-lg-4">
+    <h2 class="h5">Email delivery</h2>
+    <form method="post" action="/alerts/config" class="card card-body">
+      <div class="mb-2">
+        <label class="form-label small">SMTP host <span class="text-muted">(blank = disable email)</span></label>
+        <input name="smtp_host" value="{{ .Config.SMTPHost }}" class="form-control form-control-sm" placeholder="smtp.example.com">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small">SMTP port</label>
+        <input type="number" name="smtp_port" value="{{ if .Config.SMTPPort }}{{ .Config.SMTPPort }}{{ end }}" min="1" max="65535" class="form-control form-control-sm" placeholder="587">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small">SMTP username</label>
+        <input name="smtp_username" value="{{ .Config.SMTPUsername }}" class="form-control form-control-sm">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small">SMTP password</label>
+        <input type="password" name="smtp_password" value="{{ .Config.SMTPPassword }}" class="form-control form-control-sm" autocomplete="new-password">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small">From address</label>
+        <input name="from_address" value="{{ .Config.FromAddress }}" class="form-control form-control-sm" placeholder="ace@example.com">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small">Recipients <span class="text-muted">(comma or newline separated)</span></label>
+        <textarea name="recipients" class="form-control form-control-sm" rows="3">{{ range $i, $r := .Config.Recipients }}{{ if $i }}
+{{ end }}{{ $r }}{{ end }}</textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small">Reminder every N hours <span class="text-muted">(0 = one email per firing)</span></label>
+        <input type="number" name="reminder_interval_hours" value="{{ if .Config.ReminderIntervalHours }}{{ .Config.ReminderIntervalHours }}{{ end }}" min="0" class="form-control form-control-sm">
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-primary">Save</button>
+        <button class="btn btn-sm btn-outline-secondary" formaction="/alerts/test" formmethod="post">Send test email</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{ end }}

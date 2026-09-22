@@ -209,18 +209,127 @@ func (s *Scheduler) onRunFinish(run *models.Run) {
 		_ = models.SaveBot(s.Cfg.BotsDir, b)
 	}
 
-	if failed {
-		at := time.Now().UTC()
-		alert := models.Alert{
-			ID:       models.NewAlertID(at, botName),
-			Bot:      botName,
-			Scenario: run.Scenario,
-			RunID:    run.ID,
-			At:       at,
-			Reason:   reason,
+	// State-machine transition. States are per-bot and persisted in
+	// alert_state.json; the scheduler goroutine is the only writer.
+	//
+	// Semantics:
+	//   ok    + failed → firing  (append alert, send email if configured)
+	//   firing + failed → firing (reminder email only if past interval)
+	//   firing + ok     → ok     (append recovery, send recovery email)
+	//   ok    + ok      → ok     (no-op)
+	s.transition(botName, run, failed, reason)
+}
+
+// transition runs the state machine for one bot after a run completes.
+// Kept separate from onRunFinish so the delivery side doesn't crowd
+// the tag-and-reason logic.
+func (s *Scheduler) transition(botName string, run *models.Run, failed bool, reason string) {
+	states, err := models.LoadAlertStates(s.Cfg.BotsDir)
+	if err != nil {
+		log.Printf("ace: alert state load: %v", err)
+		states = map[string]models.AlertState{}
+	}
+	cfg, err := models.LoadAlertConfig(s.Cfg.BotsDir)
+	if err != nil {
+		log.Printf("ace: alert config load: %v", err)
+	}
+	now := time.Now().UTC()
+	prev := states[botName]
+	next := prev
+
+	switch {
+	case failed && prev.State != "firing":
+		next.State = "firing"
+		next.LastAt = now
+		next.LastRunID = run.ID
+		next.LastReason = reason
+		next.ConsecutiveFails = prev.ConsecutiveFails + 1
+		next.LastNotifiedAt = now
+		s.appendAlert(botName, run, now, reason)
+		s.sendEmail(cfg, botName, run, reason, "firing")
+
+	case failed && prev.State == "firing":
+		next.LastAt = now
+		next.LastRunID = run.ID
+		next.LastReason = reason
+		next.ConsecutiveFails = prev.ConsecutiveFails + 1
+		// Reminder: only if the operator opted in with a positive
+		// interval, and enough time has passed since the last notify.
+		if cfg.ReminderIntervalHours > 0 {
+			gap := now.Sub(prev.LastNotifiedAt)
+			if gap >= time.Duration(cfg.ReminderIntervalHours)*time.Hour {
+				next.LastNotifiedAt = now
+				s.appendAlert(botName, run, now, "reminder: "+reason)
+				s.sendEmail(cfg, botName, run, reason, "reminder")
+			}
 		}
-		if err := models.AppendAlert(s.Cfg.BotsDir, alert); err != nil {
-			log.Printf("ace: bot %q: append alert: %v", botName, err)
-		}
+
+	case !failed && prev.State == "firing":
+		next.State = "ok"
+		next.LastAt = now
+		next.LastRunID = run.ID
+		next.LastReason = ""
+		next.ConsecutiveFails = 0
+		next.LastNotifiedAt = now
+		s.appendAlert(botName, run, now, "recovered")
+		s.sendEmail(cfg, botName, run, "recovered", "recovered")
+
+	default:
+		// ok + ok — nothing to persist.
+		return
+	}
+
+	states[botName] = next
+	if err := models.SaveAlertStates(s.Cfg.BotsDir, states); err != nil {
+		log.Printf("ace: alert state save: %v", err)
+	}
+}
+
+// appendAlert files one history row. Errors are logged; alert history
+// is best-effort — the state machine still records what happened.
+func (s *Scheduler) appendAlert(botName string, run *models.Run, at time.Time, reason string) {
+	a := models.Alert{
+		ID:       models.NewAlertID(at, botName),
+		Bot:      botName,
+		Scenario: run.Scenario,
+		RunID:    run.ID,
+		At:       at,
+		Reason:   reason,
+	}
+	if err := models.AppendAlert(s.Cfg.BotsDir, a); err != nil {
+		log.Printf("ace: bot %q: append alert: %v", botName, err)
+	}
+}
+
+// sendEmail wraps SendAlertEmail with subject/body construction and
+// error logging. transitionKind is one of "firing", "reminder",
+// "recovered" and drives the subject prefix.
+func (s *Scheduler) sendEmail(cfg models.AlertConfig, botName string, run *models.Run, reason, transitionKind string) {
+	if cfg.SMTPHost == "" {
+		return
+	}
+	var prefix string
+	switch transitionKind {
+	case "firing":
+		prefix = "[ace ALERT]"
+	case "reminder":
+		prefix = "[ace REMINDER]"
+	case "recovered":
+		prefix = "[ace RECOVERED]"
+	default:
+		prefix = "[ace]"
+	}
+	subject := fmt.Sprintf("%s %s (%s)", prefix, botName, run.Scenario)
+	body := fmt.Sprintf(
+		"Bot: %s\nScenario: %s\nRun: %s\nStatus: %s\nReason: %s\nStarted: %s\nFinished: %s\n",
+		botName, run.Scenario, run.ID, run.Status, reason,
+		run.StartedAt.Format(time.RFC3339),
+		run.FinishedAt.Format(time.RFC3339),
+	)
+	if err := SendAlertEmail(cfg, subject, body); err != nil {
+		log.Printf("ace: bot %q: send email: %v", botName, err)
+		// Record the delivery failure in history so the operator can see
+		// why they didn't get a page. Uses the same alerts.json bucket.
+		s.appendAlert(botName, run, time.Now().UTC(), "email failed: "+err.Error())
 	}
 }
