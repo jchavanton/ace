@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -45,18 +44,9 @@ func (s *Server) handleAlerts(c *gin.Context) {
 			firingList = append(firingList, firing{Bot: name, State: st})
 		}
 	}
-	// Effective retention (config-file override → flag default) for the
-	// UI: shows the number the sweep will use, distinguishing "unset"
-	// (empty input, will fall back) from "disabled" (a literal 0 the
-	// operator typed, stored as -1).
-	runsDaysEffective := s.Cfg.RunsRetentionDays
-	switch cfg.RunsRetentionDays {
-	case 0:
-	case -1:
-		runsDaysEffective = 0
-	default:
-		runsDaysEffective = cfg.RunsRetentionDays
-	}
+	// Effective alerts-retention (config-file override → flag default)
+	// for the UI. -1 in the config means "explicitly disabled" and
+	// renders as 0 in the effective value.
 	alertsKeepEffective := s.Cfg.AlertsRetentionCount
 	switch cfg.AlertsRetentionCount {
 	case 0:
@@ -73,8 +63,6 @@ func (s *Server) handleAlerts(c *gin.Context) {
 		"Firing":                   firingList,
 		"Alerts":                   alerts,
 		"TestMessage":              c.Query("test"),
-		"CleanupMessage":           c.Query("cleanup"),
-		"RunsRetentionEffective":   runsDaysEffective,
 		"AlertsRetentionEffective": alertsKeepEffective,
 	})
 }
@@ -123,28 +111,12 @@ func (s *Server) handleAlertConfigSave(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/alerts")
 }
 
-// handleCleanupConfigSave persists the retention knobs from the
-// Cleanup card on /alerts. Empty fields fall back to the flag default;
-// an explicit "0" from the form means "disable that dimension" and is
-// stored as -1 so the sweep can distinguish it from "unset".
-func (s *Server) handleCleanupConfigSave(c *gin.Context) {
+// handleAlertsRetentionSave persists the alerts.json cap from the
+// Retention card on /alerts. Empty = use flag default, "0" = disabled
+// (stored as -1), positive = row count. Cleanup for the runs dir is
+// controlled on /runs, not here.
+func (s *Server) handleAlertsRetentionSave(c *gin.Context) {
 	cfg, _ := models.LoadAlertConfig(s.Cfg.BotsDir)
-	// runs_retention_days: "" = unset (use flag), "0" = -1 disabled,
-	// positive = days. Same shape for alerts_retention_count.
-	if raw := strings.TrimSpace(c.PostForm("runs_retention_days")); raw != "" {
-		n, err := strconv.Atoi(raw)
-		if err != nil || n < 0 {
-			c.String(http.StatusBadRequest, "runs_retention_days: must be >= 0")
-			return
-		}
-		if n == 0 {
-			cfg.RunsRetentionDays = -1
-		} else {
-			cfg.RunsRetentionDays = n
-		}
-	} else {
-		cfg.RunsRetentionDays = 0
-	}
 	if raw := strings.TrimSpace(c.PostForm("alerts_retention_count")); raw != "" {
 		n, err := strconv.Atoi(raw)
 		if err != nil || n < 0 {
@@ -166,19 +138,6 @@ func (s *Server) handleCleanupConfigSave(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/alerts")
 }
 
-// handleCleanupRun triggers a synchronous sweep. Redirects back to
-// /alerts with a short result summary in the flash param. The sweep
-// blocks the request — a large runs dir could take a few seconds; if
-// that becomes a problem later we can move to a goroutine + a
-// "cleanup in progress" spinner.
-func (s *Server) handleCleanupRun(c *gin.Context) {
-	if s.Cleanup == nil {
-		c.String(http.StatusServiceUnavailable, "cleanup not enabled")
-		return
-	}
-	summary := s.Cleanup.Run()
-	c.Redirect(http.StatusSeeOther, "/alerts?cleanup="+url.QueryEscape(summary.String()))
-}
 
 // handleAlertTest sends a fixed "this is a test" message using the
 // currently-saved config. Result is shown via ?test=ok|error=... on

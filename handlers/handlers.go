@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -57,8 +58,9 @@ func (s *Server) Register(r *gin.Engine) {
 	r.GET("/alerts", s.handleAlerts)
 	r.POST("/alerts/config", s.handleAlertConfigSave)
 	r.POST("/alerts/test", s.handleAlertTest)
-	r.POST("/alerts/cleanup/config", s.handleCleanupConfigSave)
-	r.POST("/alerts/cleanup/run", s.handleCleanupRun)
+	r.POST("/alerts/retention", s.handleAlertsRetentionSave)
+	r.POST("/runs/retention", s.handleRunsRetentionSave)
+	r.POST("/runs/cleanup", s.handleRunsCleanupNow)
 }
 
 func (s *Server) handleIndex(c *gin.Context) {
@@ -261,12 +263,68 @@ func (s *Server) handleRuns(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "list runs: %v", err)
 		return
 	}
+	// Cleanup card data — same fields the alerts page uses for its
+	// half of the retention story. Config is best-effort; a broken
+	// alert_config.json shouldn't blank the run list.
+	cfg, _ := models.LoadAlertConfig(s.Cfg.BotsDir)
+	runsDaysEffective := s.Cfg.RunsRetentionDays
+	switch cfg.RunsRetentionDays {
+	case 0:
+	case -1:
+		runsDaysEffective = 0
+	default:
+		runsDaysEffective = cfg.RunsRetentionDays
+	}
 	s.render(c, http.StatusOK, gin.H{
-		"Title":           "Runs",
-		"Page":            "runs",
-		"ContentTemplate": "content_runs",
-		"Runs":            runs,
+		"Title":                  "Runs",
+		"Page":                   "runs",
+		"ContentTemplate":        "content_runs",
+		"Runs":                   runs,
+		"Config":                 cfg,
+		"RunsRetentionEffective": runsDaysEffective,
+		"CleanupMessage":         c.Query("cleanup"),
 	})
+}
+
+// handleRunsRetentionSave persists the run-dir retention knob from
+// the Cleanup card on /runs. Same tri-state as alerts_retention_count:
+// "" = unset (use flag default), "0" = disabled (stored as -1),
+// positive = days.
+func (s *Server) handleRunsRetentionSave(c *gin.Context) {
+	cfg, _ := models.LoadAlertConfig(s.Cfg.BotsDir)
+	if raw := strings.TrimSpace(c.PostForm("runs_retention_days")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			c.String(http.StatusBadRequest, "runs_retention_days: must be >= 0")
+			return
+		}
+		if n == 0 {
+			cfg.RunsRetentionDays = -1
+		} else {
+			cfg.RunsRetentionDays = n
+		}
+	} else {
+		cfg.RunsRetentionDays = 0
+	}
+	if err := models.SaveAlertConfig(s.Cfg.BotsDir, cfg); err != nil {
+		c.String(http.StatusInternalServerError, "save: %v", err)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/runs")
+}
+
+// handleRunsCleanupNow fires a synchronous sweep and redirects back
+// to /runs with the summary in a flash param. The sweep still trims
+// both dimensions (runs + alerts.json) — same operation, invoked from
+// a different page. Fine to leave the alerts side firing here too;
+// the operator asked to prune "now" and doing it fully matches intent.
+func (s *Server) handleRunsCleanupNow(c *gin.Context) {
+	if s.Cleanup == nil {
+		c.String(http.StatusServiceUnavailable, "cleanup not enabled")
+		return
+	}
+	summary := s.Cleanup.Run()
+	c.Redirect(http.StatusSeeOther, "/runs?cleanup="+url.QueryEscape(summary.String()))
 }
 
 func (s *Server) handleRunDetail(c *gin.Context) {

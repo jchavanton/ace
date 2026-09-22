@@ -1,6 +1,38 @@
 {{ define "content_runs" }}
 <h1 class="h3 mb-4">Runs</h1>
 
+{{ if .CleanupMessage }}
+<div class="alert alert-info" role="alert">Cleanup: {{ .CleanupMessage }}</div>
+{{ end }}
+
+<div class="card card-body mb-4">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+      <h2 class="h6 mb-1">Cleanup</h2>
+      <div class="small text-muted">
+        {{ if .Config.LastCleanupAt.IsZero }}
+          No sweep has run yet.
+        {{ else }}
+          Last sweep: {{ .Config.LastCleanupAt.Format "2006-01-02 15:04:05" }} — {{ .Config.LastCleanupSummary }}
+        {{ end }}
+      </div>
+    </div>
+    <form method="post" action="/runs/retention" class="d-flex align-items-end gap-2 flex-wrap">
+      <div>
+        <label class="form-label small mb-1">
+          Runs retention (days)
+          <span class="text-muted">— effective: {{ if .RunsRetentionEffective }}{{ .RunsRetentionEffective }}{{ else }}disabled{{ end }}. 0 = disable, blank = default.</span>
+        </label>
+        <input type="number" name="runs_retention_days" min="0"
+               value="{{ if .Config.RunsRetentionDays }}{{ if eq .Config.RunsRetentionDays -1 }}0{{ else }}{{ .Config.RunsRetentionDays }}{{ end }}{{ end }}"
+               class="form-control form-control-sm" style="width:8rem;">
+      </div>
+      <button class="btn btn-sm btn-primary">Save</button>
+      <button class="btn btn-sm btn-outline-secondary" formaction="/runs/cleanup" formmethod="post">Run cleanup now</button>
+    </form>
+  </div>
+</div>
+
 {{ if .Runs }}
 <div class="table-responsive">
 <table class="table table-sm align-middle">
