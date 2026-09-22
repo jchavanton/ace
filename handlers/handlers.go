@@ -24,6 +24,7 @@ type Server struct {
 	Cfg      *config.Config
 	Runner   *controller.Runner
 	Firewall *controller.Firewall // nil = firewall page disabled
+	Cleanup  *controller.Cleanup  // nil = /alerts "run now" disabled
 }
 
 // Register installs the routes on r. When Cfg.BasicAuthHtpasswd is set,
@@ -56,6 +57,8 @@ func (s *Server) Register(r *gin.Engine) {
 	r.GET("/alerts", s.handleAlerts)
 	r.POST("/alerts/config", s.handleAlertConfigSave)
 	r.POST("/alerts/test", s.handleAlertTest)
+	r.POST("/alerts/cleanup/config", s.handleCleanupConfigSave)
+	r.POST("/alerts/cleanup/run", s.handleCleanupRun)
 }
 
 func (s *Server) handleIndex(c *gin.Context) {

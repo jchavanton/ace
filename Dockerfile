@@ -112,6 +112,9 @@ CMD ["/bin/sh", "-c", "exec /usr/local/bin/ace \
     -scenarios-dir ${ACE_SCENARIOS_DIR} \
     -runs-dir ${ACE_RUNS_DIR} \
     -bots-dir ${ACE_BOTS_DIR} \
+    -runs-retention-days ${ACE_RUNS_RETENTION_DAYS:-30} \
+    -alerts-retention-count ${ACE_ALERTS_RETENTION_COUNT:-500} \
+    ${ACE_PUBLIC_BASE_URL:+-public-base-url ${ACE_PUBLIC_BASE_URL}} \
     -firewall-state-dir ${ACE_FIREWALL_STATE_DIR} \
     ${ACE_PUBLIC_ADDRESS:+-public-address ${ACE_PUBLIC_ADDRESS}} \
     ${ACE_LOCAL_IPS:+-local-ips ${ACE_LOCAL_IPS}} \

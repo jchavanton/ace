@@ -6,6 +6,11 @@
   Test send: {{ .TestMessage }}
 </div>
 {{ end }}
+{{ if .CleanupMessage }}
+<div class="alert alert-info" role="alert">
+  Cleanup: {{ .CleanupMessage }}
+</div>
+{{ end }}
 
 <div class="row g-4">
   <div class="col-lg-8">
@@ -92,6 +97,39 @@
       <div class="d-flex gap-2">
         <button class="btn btn-sm btn-primary">Save</button>
         <button class="btn btn-sm btn-outline-secondary" formaction="/alerts/test" formmethod="post">Send test email</button>
+      </div>
+    </form>
+
+    <h2 class="h5 mt-4">Cleanup</h2>
+    <form method="post" action="/alerts/cleanup/config" class="card card-body">
+      <div class="mb-2">
+        <label class="form-label small">
+          Runs retention (days)
+          <span class="text-muted">— effective: {{ if .RunsRetentionEffective }}{{ .RunsRetentionEffective }}{{ else }}disabled{{ end }}. 0 = disable, blank = use default.</span>
+        </label>
+        <input type="number" name="runs_retention_days" min="0"
+               value="{{ if .Config.RunsRetentionDays }}{{ if eq .Config.RunsRetentionDays -1 }}0{{ else }}{{ .Config.RunsRetentionDays }}{{ end }}{{ end }}"
+               class="form-control form-control-sm">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small">
+          Alerts retention (rows)
+          <span class="text-muted">— effective: {{ if .AlertsRetentionEffective }}{{ .AlertsRetentionEffective }}{{ else }}disabled{{ end }}. 0 = disable, blank = use default.</span>
+        </label>
+        <input type="number" name="alerts_retention_count" min="0"
+               value="{{ if .Config.AlertsRetentionCount }}{{ if eq .Config.AlertsRetentionCount -1 }}0{{ else }}{{ .Config.AlertsRetentionCount }}{{ end }}{{ end }}"
+               class="form-control form-control-sm">
+      </div>
+      <div class="mb-3 small text-muted">
+        {{ if .Config.LastCleanupAt.IsZero }}
+          No sweep has run yet.
+        {{ else }}
+          Last sweep: {{ .Config.LastCleanupAt.Format "2006-01-02 15:04:05" }} — {{ .Config.LastCleanupSummary }}
+        {{ end }}
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-primary">Save</button>
+        <button class="btn btn-sm btn-outline-secondary" formaction="/alerts/cleanup/run" formmethod="post">Run cleanup now</button>
       </div>
     </form>
   </div>

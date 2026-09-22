@@ -90,6 +90,16 @@ func (r *Runner) ActiveRuns() []ActiveRun {
 	return out
 }
 
+// IsRunActive reports whether the run with the given ID is currently
+// executing. Used by the cleanup sweep to avoid removing an in-flight
+// run's directory even if its start time is past the retention cutoff.
+func (r *Runner) IsRunActive(id string) bool {
+	r.activeMu.Lock()
+	defer r.activeMu.Unlock()
+	_, ok := r.active[id]
+	return ok
+}
+
 // IsScenarioRunning reports whether at least one active run is
 // executing the given scenario. Used by the scenario-delete handler
 // to refuse deletion of a scenario that's currently in use, and by

@@ -180,6 +180,49 @@ func ListAlerts(dir string) ([]Alert, error) {
 	return out, nil
 }
 
+// TrimAlerts keeps the newest `keep` rows in alerts.json and rewrites
+// the file atomically. keep <= 0 is a no-op (0 = "disabled" per config
+// semantics). Missing file is also a no-op — nothing to trim. Returns
+// the number of rows removed.
+func TrimAlerts(dir string, keep int) (int, error) {
+	if keep <= 0 {
+		return 0, nil
+	}
+	alerts, err := ListAlerts(dir)
+	if err != nil {
+		return 0, err
+	}
+	if len(alerts) <= keep {
+		return 0, nil
+	}
+	// ListAlerts returns newest-first. Keep the head; drop the tail.
+	kept := alerts[:keep]
+	removed := len(alerts) - keep
+	// Preserve chronological order in the file so future appends stay
+	// cheap; ListAlerts sorts on read.
+	sort.Slice(kept, func(i, j int) bool { return kept[i].At.Before(kept[j].At) })
+	path := filepath.Join(dir, "alerts.json")
+	tmp, err := os.CreateTemp(dir, ".alerts.*.tmp")
+	if err != nil {
+		return 0, err
+	}
+	defer os.Remove(tmp.Name())
+	enc := json.NewEncoder(tmp)
+	for _, a := range kept {
+		if err := enc.Encode(a); err != nil {
+			tmp.Close()
+			return 0, err
+		}
+	}
+	if err := tmp.Close(); err != nil {
+		return 0, err
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return 0, err
+	}
+	return removed, nil
+}
+
 // AckAlert flips the Acked flag on the alert with the matching ID and
 // rewrites alerts.json. Not found = no-op (idempotent from the UI's
 // perspective).

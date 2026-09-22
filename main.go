@@ -38,6 +38,9 @@ func main() {
 	}
 	sched := &controller.Scheduler{Cfg: cfg, Runner: runner}
 	sched.Start()
+	cleanup := &controller.Cleanup{Cfg: cfg, Runner: runner}
+	cleanup.Start()
+	srv.Cleanup = cleanup
 	// Any run left in status=running from a previous process is a lie
 	// after this restart — mark them errored before we serve, so the UI
 	// (and the Stop button in particular) doesn't act on ghost runs.

@@ -60,6 +60,23 @@ type Config struct {
 	// install with just -runs-dir works without extra flags.
 	BotsDir string
 
+	// RunsRetentionDays is the default age cutoff for the run-dir sweep
+	// (0 = disabled, keep runs forever). Overridable per-install from
+	// the /alerts page — the persisted value in alert_config.json wins
+	// when non-zero.
+	RunsRetentionDays int
+
+	// AlertsRetentionCount is the default cap on rows kept in
+	// alerts.json (0 = disabled, unbounded). Same override pattern as
+	// RunsRetentionDays.
+	AlertsRetentionCount int
+
+	// PublicBaseURL is the externally-visible URL prefix used in alert
+	// emails so recipients get a clickable link to the run detail page
+	// (e.g. "https://ace.netic.ravenrtc.com"). Empty = no link included;
+	// the run ID is still shown as text.
+	PublicBaseURL string
+
 	// VoiceRefDir is the source dir for voip_patrol's reference WAV
 	// files. Scenarios reference these by relative path (e.g.
 	// "voice_ref_files/reference_8000.wav"), which voip_patrol
@@ -128,6 +145,9 @@ func FromFlags() *Config {
 	flag.StringVar(&c.ScenariosDir, "scenarios-dir", "./scenarios", "directory holding scenario XML files")
 	flag.StringVar(&c.RunsDir, "runs-dir", "./runs", "directory where per-run output lands")
 	flag.StringVar(&c.BotsDir, "bots-dir", "./bots", "directory holding bot JSON files and alerts.json")
+	flag.IntVar(&c.RunsRetentionDays, "runs-retention-days", 30, "age (in days) after which finished run dirs are removed by the hourly sweep; 0 = disable")
+	flag.IntVar(&c.AlertsRetentionCount, "alerts-retention-count", 500, "cap on rows kept in alerts.json; older rows trimmed by the hourly sweep; 0 = disable")
+	flag.StringVar(&c.PublicBaseURL, "public-base-url", "", "externally-visible URL prefix used in alert emails (e.g. https://ace.example.com); empty = no link in email")
 	flag.StringVar(&c.VoiceRefDir, "voice-ref-dir", "/voice_ref_files", "source dir for voip_patrol reference WAVs; symlinked into each run dir as 'voice_ref_files'. Empty disables.")
 	flag.StringVar(&c.BasicAuthHtpasswd, "basic-auth-htpasswd", "", "path to htpasswd file (bcrypt); empty = no auth")
 	flag.StringVar(&c.FirewallStateDir, "firewall-state-dir", "", "directory holding firewall.json for the /firewall page; empty disables the page")

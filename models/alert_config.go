@@ -26,6 +26,16 @@ type AlertConfig struct {
 	FromAddress           string   `json:"from_address,omitempty"`
 	Recipients            []string `json:"recipients,omitempty"`
 	ReminderIntervalHours int      `json:"reminder_interval_hours,omitempty"`
+
+	// Cleanup knobs. Both zero on a fresh install → the controller
+	// applies the flag defaults (30 days / 500 alerts). Persisting them
+	// here lets the operator edit from the UI without a redeploy.
+	// Explicit -1 means "disable that dimension" (kept in the file so
+	// the UI can distinguish "unset" from "disabled").
+	RunsRetentionDays    int       `json:"runs_retention_days,omitempty"`
+	AlertsRetentionCount int       `json:"alerts_retention_count,omitempty"`
+	LastCleanupAt        time.Time `json:"last_cleanup_at,omitempty"`
+	LastCleanupSummary   string    `json:"last_cleanup_summary,omitempty"`
 }
 
 // AlertState is one bot's slot in the state machine. Persisted as one
