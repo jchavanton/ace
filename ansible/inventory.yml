@@ -78,7 +78,8 @@ ace_gcp_hosts:
       # jchavanton/voip_patrol:<tag> matching the ace Dockerfile is
       # available on Docker Hub AND the Dockerfile's stage 1 references it.
       ace_use_prebuilt_voip_patrol: false
-      ace_source_dir: "{{ lookup('env','HOME') }}/git/ace"
+      ace_source_dir:         "{{ lookup('env','HOME') }}/git/ace"
+      voip_patrol_source_dir: "{{ lookup('env','HOME') }}/git/voip_patrol"
       # install-ace.sh put the stack under $HOME/ace; keep that so the
       # switch to ansible doesn't require a compose migration.
       ace_install_dir: "/home/{{ ansible_user }}/ace"
