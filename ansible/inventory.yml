@@ -73,9 +73,11 @@ ace_gcp_hosts:
    vars:
       # ~/.ssh/config alias resolves this. Matches other netic-* GCP hosts.
       ansible_user: ext_jchavanton_gmail_com
-      # Prebuilt voip_patrol image — no sibling checkout needed, and the
-      # docker-compose.yml's additional_contexts is patched out.
-      ace_use_prebuilt_voip_patrol: true
+      # Source-build voip_patrol from the sibling checkout (currently on
+      # feat/nameserver-cli). Set to true only when a prebuilt
+      # jchavanton/voip_patrol:<tag> matching the ace Dockerfile is
+      # available on Docker Hub AND the Dockerfile's stage 1 references it.
+      ace_use_prebuilt_voip_patrol: false
       ace_source_dir: "{{ lookup('env','HOME') }}/git/ace"
       # install-ace.sh put the stack under $HOME/ace; keep that so the
       # switch to ansible doesn't require a compose migration.

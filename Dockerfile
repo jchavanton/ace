@@ -16,12 +16,43 @@
 # host's interfaces.
 
 # --- Stage 1: voip_patrol -----------------------------------------------------
-# Pull a prebuilt image rather than building from source: the tone_detector
-# branch needs pjproject patches that are baked into this image. To rebuild
-# locally instead, swap this back to the debian:trixie source-build flow
-# from the git history (the additional_contexts wiring in docker-compose.yml
-# is preserved for that path).
-FROM jchavanton/voip_patrol:0.10.1-ace1 AS voip_patrol_builder
+# Source build from the sibling ../voip_patrol checkout — wired via
+# docker-compose.yml's additional_contexts. Whichever branch is checked
+# out locally is the one that ships (currently feat/nameserver-cli for
+# the --nameserver CLI flag). If you switch back to a prebuilt image,
+# also strip the additional_contexts block on the target (ansible does
+# that automatically when ace_use_prebuilt_voip_patrol is true).
+FROM debian:trixie AS voip_patrol_builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential libcurl4-openssl-dev cmake pkg-config \
+        libasound2-dev libopus0 libopus-dev libssl-dev libuuid1 uuid-dev \
+        git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=voip_patrol . /git/voip_patrol
+
+# Scrub stale build artifacts from the local dev checkout so pjproject
+# reconfigures cleanly inside the container (a local ./configure caches
+# the host's autoconf triplet in build.mak, which then makes the in-
+# container build try to link the test suite with the wrong lib search
+# paths — surfaces as "undefined reference to uuid_generate").
+RUN cd /git/voip_patrol \
+    && rm -f pjproject/build.mak pjproject/pjlib/include/pj/config_site.h \
+    && rm -rf pjproject/pjlib/build/output \
+              pjproject/pjlib-util/build/output \
+              pjproject/pjnath/build/output \
+              pjproject/pjmedia/build/output \
+              pjproject/pjsip/build/output \
+              pjproject/third_party/build/output \
+    && rm -f CMakeCache.txt Makefile cmake_install.cmake voip_patrol \
+    && rm -rf CMakeFiles
+
+RUN cd /git/voip_patrol \
+    && cp include/config_site.h pjproject/pjlib/include/pj/config_site.h \
+    && cd pjproject && ./configure --disable-libwebrtc --disable-opencore-amr \
+    && make dep && make && make install \
+    && cd .. && cmake CMakeLists.txt && make
 
 # --- Stage 2: ace -------------------------------------------------------------
 FROM golang:1.22-bookworm AS ace_builder
