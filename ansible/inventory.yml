@@ -100,6 +100,10 @@ ace_gcp_hosts:
       # cert (peer doesn't validate our CN); if we ever need to receive
       # TLS calls under a different SIP identity, swap this for a
       # dedicated cert. Empty ace_tls_host_cert_dir disables the mount.
+      # Used in alert emails so recipients get a clickable link to
+      # /runs/<id>. Caddy fronts the host at this hostname.
+      ace_public_base_url: "https://ace.netic.ravenrtc.com"
+
       ace_tls_host_cert_dir: "/var/lib/docker/volumes/authelia-stack_caddy_data/_data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/ace.netic.ravenrtc.com"
       ace_tls_container_cert_dir: "/tls"
       ace_tls_cert_file: "ace.netic.ravenrtc.com.crt"

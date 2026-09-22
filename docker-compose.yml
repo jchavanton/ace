@@ -67,6 +67,10 @@ services:
       ACE_TLS_CERT:    "${ACE_TLS_CERT:-}"
       ACE_TLS_PRIVKEY: "${ACE_TLS_PRIVKEY:-}"
       ACE_TLS_CALIST:  "${ACE_TLS_CALIST:-}"
+      # Externally-visible URL prefix used in alert email bodies so
+      # recipients can click through to the run detail page. Empty = no
+      # link in the email (run ID still shown as text).
+      ACE_PUBLIC_BASE_URL: "${ACE_PUBLIC_BASE_URL:-}"
     volumes:
       - ./scenarios:/data/scenarios:rw
       - ./runs:/data/runs:rw
