@@ -105,12 +105,15 @@ func ListBots(dir string) ([]Bot, error) {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}
-		if e.Name() == "alerts.json" {
-			continue
-		}
 		name := strings.TrimSuffix(e.Name(), ".json")
 		b, err := LoadBot(dir, name)
 		if err != nil {
+			continue
+		}
+		// Sibling files in this dir (alerts.json, alert_config.json,
+		// alert_state.json) parse as a Bot with a zero Name. Positive
+		// filter: a real bot has Name matching the filename.
+		if b.Name == "" || b.Name != name {
 			continue
 		}
 		out = append(out, *b)
