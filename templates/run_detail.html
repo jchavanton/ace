@@ -31,6 +31,7 @@
   {{ if .SIPPort }} · SIP {{ .SIPPort }}{{ end }}
   {{ if .RTPPortStart }} · RTP {{ .RTPPortStart }}–{{ .RTPPortEnd }}{{ end }}
   {{ if .Transport }} · transport {{ .Transport }}{{ end }}
+  {{ if .Nameservers }} · DNS {{ .Nameservers }}{{ end }}
   {{ if .TimeoutSeconds }} · timeout {{ .TimeoutSeconds }}s{{ end }}
   {{ if .StartedBy }} · by {{ .StartedBy }}{{ end }}
 </p>

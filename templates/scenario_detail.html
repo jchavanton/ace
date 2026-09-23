@@ -77,6 +77,19 @@
       · private {{ if .LocalIPs }}{{ range $i, $ip := .LocalIPs }}{{ if $i }}, {{ end }}<code>{{ $ip }}</code>{{ end }}{{ else }}<em>none</em>{{ end }}
     </div>
   </div>
+  <div class="row g-2 align-items-center mt-1">
+    <div class="col-auto">
+      <label class="col-form-label small text-muted"
+             title="Comma-separated list of DNS servers used by voip_patrol for SIP SRV/NAPTR resolution. Each entry is passed as --nameserver <val>. Blank = host resolver.">
+        Nameservers
+      </label>
+    </div>
+    <div class="col-auto flex-grow-1">
+      <input form="scenario-form" name="nameservers" value="{{ .SelectedNameservers }}"
+             placeholder="8.8.8.8, 1.1.1.1"
+             class="form-control form-control-sm">
+    </div>
+  </div>
 </fieldset>
 
   <textarea name="xml" id="xml-editor" class="form-control" style="font-family:monospace; min-height:60vh;">{{ .XML }}</textarea>

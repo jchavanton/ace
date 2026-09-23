@@ -80,6 +80,9 @@ func buildAlertBody(publicBaseURL, botName string, run *models.Run, reason strin
 	if run.PublicAddress != "" {
 		fmt.Fprintf(&b, "Public: %s\n", run.PublicAddress)
 	}
+	if run.Nameservers != "" {
+		fmt.Fprintf(&b, "DNS: %s\n", run.Nameservers)
+	}
 	if run.Error != "" {
 		fmt.Fprintf(&b, "Error: %s\n", run.Error)
 	}

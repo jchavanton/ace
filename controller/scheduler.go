@@ -132,6 +132,7 @@ func (s *Scheduler) fire(b *models.Bot, now time.Time) {
 		PublicAddress:  scn.Ports.PublicAddress,
 		TimeoutSeconds: scn.Ports.TimeoutSeconds,
 		Transport:      scn.Ports.Transport,
+		Nameservers:    scn.Ports.Nameservers,
 	}
 	trigger := "bot:" + b.Name
 	run, err := s.Runner.StartWithTrigger(scn, "scheduler", trigger, ports)

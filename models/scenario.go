@@ -60,6 +60,11 @@ type ScenarioPorts struct {
 	// but passes no CLI flag: TLS is enabled per-action in the scenario
 	// XML, not toggled at the process level.
 	Transport string `json:"transport,omitempty"`
+	// Nameservers is a comma-separated list of DNS servers voip_patrol
+	// uses for SIP SRV/NAPTR resolution — one --nameserver arg per
+	// entry on the CLI. Empty = don't pass any --nameserver, and
+	// voip_patrol falls back to the host's resolver.
+	Nameservers string `json:"nameservers,omitempty"`
 }
 
 // PortsPath returns the absolute path to the scenario's sidecar

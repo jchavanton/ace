@@ -236,6 +236,10 @@ type Ports struct {
 	// to voip_patrol's --udp/--tcp listen-restriction flags; tls and ""
 	// pass no flag (TLS is enabled per-action in the scenario XML).
 	Transport string
+	// Nameservers is a comma-separated list of DNS servers. The runner
+	// splits on commas and passes one --nameserver arg to voip_patrol
+	// per entry. Empty = no --nameserver args, host resolver is used.
+	Nameservers string
 }
 
 // Start kicks off a scenario run and returns the freshly-created Run
@@ -323,6 +327,7 @@ func (r *Runner) StartWithTrigger(scenario *models.Scenario, startedBy, triggere
 	run.RTPPortEnd = rtpEnd
 	run.PublicAddress = publicAddr
 	run.Transport = ports.Transport
+	run.Nameservers = ports.Nameservers
 	// On the Run record we use the simpler UI convention: 0 = unlimited,
 	// positive = seconds. Anyone reading run.json doesn't need to know
 	// about the -1 sentinel used at the config/scenario layer.
@@ -413,6 +418,17 @@ func (r *Runner) execute(ctx context.Context, cancel context.CancelFunc, run *mo
 	}
 	if run.PublicAddress != "" {
 		args = append(args, "--ip-addr", run.PublicAddress)
+	}
+	// voip_patrol accepts --nameserver once per DNS server. Split the
+	// comma-separated string, trim, drop empties. Whitespace in the
+	// input is a common paste artifact — normalize it here so the
+	// child process only sees clean values.
+	for _, ns := range strings.Split(run.Nameservers, ",") {
+		ns = strings.TrimSpace(ns)
+		if ns == "" {
+			continue
+		}
+		args = append(args, "--nameserver", ns)
 	}
 	// voip_patrol's transport flags are listen-restrictions, not
 	// preferences: --udp/--tcp disable the other UDP/TCP listener. TLS

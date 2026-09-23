@@ -35,6 +35,10 @@ type Run struct {
 	// "" = default (no flag), "udp"/"tcp" pass --udp/--tcp, "tls" is a
 	// saved preference only (per-action TLS in XML).
 	Transport     string    `json:"transport,omitempty"`
+	// Nameservers is a comma-separated list of DNS servers passed as
+	// --nameserver args to voip_patrol. Empty on runs where DNS wasn't
+	// explicitly overridden.
+	Nameservers   string    `json:"nameservers,omitempty"`
 	// TimeoutSeconds is the deadline applied to voip_patrol for this run.
 	// 0 on records written before this field existed. -1 = unlimited.
 	TimeoutSeconds int       `json:"timeout_seconds,omitempty"`

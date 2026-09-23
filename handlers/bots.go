@@ -195,6 +195,7 @@ func (s *Server) handleBotRun(c *gin.Context) {
 		PublicAddress:  scn.Ports.PublicAddress,
 		TimeoutSeconds: scn.Ports.TimeoutSeconds,
 		Transport:      scn.Ports.Transport,
+		Nameservers:    scn.Ports.Nameservers,
 	}
 	user := c.GetString(ctxUserKey)
 	if user == "" {

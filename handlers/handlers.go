@@ -195,7 +195,8 @@ func (s *Server) handleScenarioDetail(c *gin.Context) {
 		// Empty = "no override" (mixed mode — voip_patrol listens on
 		// all transports; scenario XML picks per-action). "udp"/"tcp"
 		// pass --udp/--tcp; "tls" is a saved marker only.
-		"SelectedTransport": scn.Ports.Transport,
+		"SelectedTransport":   scn.Ports.Transport,
+		"SelectedNameservers": scn.Ports.Nameservers,
 		// HasSavedPorts controls whether the "Reset saved ports" hint
 		// shows next to the Save button.
 		"HasSavedPorts": scn.Ports != (models.ScenarioPorts{}),
@@ -248,6 +249,9 @@ func (s *Server) handleRun(c *gin.Context) {
 	}
 	if ports.Transport == "" {
 		ports.Transport = scn.Ports.Transport
+	}
+	if ports.Nameservers == "" {
+		ports.Nameservers = scn.Ports.Nameservers
 	}
 	run, err := s.Runner.Start(scn, user, ports)
 	if err != nil {
@@ -448,6 +452,7 @@ func (s *Server) handleScenarioSave(c *gin.Context) {
 		PublicAddress:  ports.PublicAddress,
 		TimeoutSeconds: ports.TimeoutSeconds,
 		Transport:      ports.Transport,
+		Nameservers:    ports.Nameservers,
 	}
 	if sp == (models.ScenarioPorts{}) {
 		if err := models.DeleteScenarioPorts(s.Cfg.ScenariosDir, name); err != nil {
@@ -607,6 +612,11 @@ func parsePorts(c *gin.Context) (controller.Ports, error) {
 	if p.Transport, err = parseTransportField(c.PostForm("transport")); err != nil {
 		return p, err
 	}
+	// Nameservers — free-form comma-separated list. We don't validate
+	// individual entries as IPs because voip_patrol accepts hostnames
+	// too. The runner splits on commas and passes one --nameserver arg
+	// per entry; whitespace is normalized there.
+	p.Nameservers = strings.TrimSpace(c.PostForm("nameservers"))
 	return p, nil
 }
 
