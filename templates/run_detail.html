@@ -116,7 +116,12 @@
 {{ if .LogTail }}
 <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
   <h2 class="h5 mb-0">voip_patrol log <small class="text-muted">(last 200 lines · {{ .LogBytes }} B total)</small></h2>
-  <a href="/runs/{{ .Run.ID }}/log" class="small" target="_blank">view full log</a>
+  <div class="small">
+    <a href="/runs/{{ .Run.ID }}/log" target="_blank">view full log</a>
+    {{ if .PJSUALogBytes }}
+      · <a href="/runs/{{ .Run.ID }}/pjsua-log" target="_blank" title="pjsua's detailed log — SRV/NAPTR resolution, transaction states, transport events">pjsua log ({{ .PJSUALogBytes }} B)</a>
+    {{ end }}
+  </div>
 </div>
 <pre id="log-pane" class="bg-dark text-light p-3 small border" style="max-height:50vh; overflow:auto; font-size:0.8rem; line-height:1.3;">{{ .LogTail }}</pre>
 <script>

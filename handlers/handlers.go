@@ -44,6 +44,7 @@ func (s *Server) Register(r *gin.Engine) {
 	r.GET("/runs", s.handleRuns)
 	r.GET("/runs/:id", s.handleRunDetail)
 	r.GET("/runs/:id/log", s.handleRunLog)
+	r.GET("/runs/:id/pjsua-log", s.handleRunPJSUALog)
 	r.GET("/runs/:id/wav/:file", s.handleRunWAV)
 	r.POST("/runs/:id/delete", s.handleRunDelete)
 	r.GET("/firewall", s.handleFirewall)
@@ -342,6 +343,14 @@ func (s *Server) handleRunDetail(c *gin.Context) {
 	// can show what's happening live. ReadFile error is ignored — empty
 	// log is the running-but-no-output-yet state.
 	logBytes, _ := os.ReadFile(filepath.Join(run.Dir(s.Cfg.RunsDir), "stdout.log"))
+	// pjsua writes its own detailed log alongside stdout.log (SRV/NAPTR
+	// resolution, transaction state, transport events). File may not
+	// exist on very short-lived runs; the template only shows the link
+	// when it's present. Stat over Read since we only need existence.
+	pjsuaSize := int64(0)
+	if fi, err := os.Stat(filepath.Join(run.Dir(s.Cfg.RunsDir), "results.json.pjsua")); err == nil {
+		pjsuaSize = fi.Size()
+	}
 	s.render(c, http.StatusOK, gin.H{
 		"Title":           "Run " + run.ID,
 		"Page":            "runs",
@@ -350,6 +359,7 @@ func (s *Server) handleRunDetail(c *gin.Context) {
 		"WAVs":            run.WAVFiles(s.Cfg.RunsDir),
 		"LogTail":         tailLines(string(logBytes), 200),
 		"LogBytes":        len(logBytes),
+		"PJSUALogBytes":   pjsuaSize,
 	})
 }
 
@@ -365,6 +375,31 @@ func (s *Server) handleRunLog(c *gin.Context) {
 		return
 	}
 	body, _ := os.ReadFile(filepath.Join(run.Dir(s.Cfg.RunsDir), "stdout.log"))
+	if tail := c.Query("tail"); tail != "" {
+		if n, err := strconv.Atoi(tail); err == nil && n > 0 {
+			body = []byte(tailLines(string(body), n))
+		}
+	}
+	c.Data(http.StatusOK, "text/plain; charset=utf-8", body)
+}
+
+// handleRunPJSUALog serves pjsua's per-run log (SRV/NAPTR resolution,
+// SIP transaction states, transport events). Same tail-N query param
+// as handleRunLog. Missing file returns 404 — some very short-lived
+// runs never produce one.
+func (s *Server) handleRunPJSUALog(c *gin.Context) {
+	id := c.Param("id")
+	run, err := models.LoadRun(s.Cfg.RunsDir, id)
+	if err != nil {
+		c.String(http.StatusNotFound, "run %q: %v", id, err)
+		return
+	}
+	path := filepath.Join(run.Dir(s.Cfg.RunsDir), "results.json.pjsua")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		c.String(http.StatusNotFound, "no pjsua log for run %q", id)
+		return
+	}
 	if tail := c.Query("tail"); tail != "" {
 		if n, err := strconv.Atoi(tail); err == nil && n > 0 {
 			body = []byte(tailLines(string(body), n))
