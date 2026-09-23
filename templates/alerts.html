@@ -19,7 +19,7 @@
     <div class="table-responsive">
     <table class="table table-sm align-middle">
       <thead><tr>
-        <th>Bot</th><th>Since</th><th>Consecutive fails</th><th>Last run</th><th>Reason</th>
+        <th>Bot</th><th>Since</th><th>Consecutive fails</th><th>Last run</th><th>Reason</th><th></th>
       </tr></thead>
       <tbody>
       {{ range .Firing }}
@@ -29,6 +29,12 @@
           <td class="text-end">{{ .State.ConsecutiveFails }}</td>
           <td>{{ if .State.LastRunID }}<a href="/runs/{{ .State.LastRunID }}" class="font-monospace small">{{ .State.LastRunID }}</a>{{ end }}</td>
           <td class="small">{{ .State.LastReason }}</td>
+          <td class="text-end">
+            <form method="post" action="/alerts/clear/{{ .Bot }}" class="d-inline"
+                  onsubmit="return confirm('Clear firing state for {{ .Bot }}? The next failure will re-fire.');">
+              <button class="btn btn-sm btn-outline-secondary" title="Reset this bot's firing state back to ok. A fresh failure will re-fire.">Clear</button>
+            </form>
+          </td>
         </tr>
       {{ end }}
       </tbody>

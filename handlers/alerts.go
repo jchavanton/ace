@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -138,6 +139,54 @@ func (s *Server) handleAlertsRetentionSave(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/alerts")
 }
 
+
+// handleAlertClear resets a bot's firing state back to "ok" without
+// waiting for a green run. Used when a scenario is persistently
+// failing and the operator wants to silence the badge (they'll get a
+// fresh alert on the next failure — the state machine re-fires cleanly).
+// A "cleared" history row is appended so the audit trail shows why the
+// bot went quiet.
+func (s *Server) handleAlertClear(c *gin.Context) {
+	name := sanitizeScenarioName(c.Param("name"))
+	if name == "" {
+		c.String(http.StatusBadRequest, "invalid name")
+		return
+	}
+	states, err := models.LoadAlertStates(s.Cfg.BotsDir)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "load states: %v", err)
+		return
+	}
+	st, ok := states[name]
+	if !ok || st.State != "firing" {
+		// Not firing (or unknown). Redirect back — this is idempotent
+		// from the operator's perspective, no reason to 404.
+		c.Redirect(http.StatusSeeOther, "/alerts")
+		return
+	}
+	lastRunID := st.LastRunID
+	st.State = "ok"
+	st.ConsecutiveFails = 0
+	st.LastReason = ""
+	states[name] = st
+	if err := models.SaveAlertStates(s.Cfg.BotsDir, states); err != nil {
+		c.String(http.StatusInternalServerError, "save states: %v", err)
+		return
+	}
+	at := time.Now().UTC()
+	alert := models.Alert{
+		ID:     models.NewAlertID(at, name),
+		Bot:    name,
+		RunID:  lastRunID,
+		At:     at,
+		Reason: "cleared by operator",
+		Acked:  true,
+	}
+	// Best-effort — a failed history append shouldn't undo the state
+	// clear the operator asked for.
+	_ = models.AppendAlert(s.Cfg.BotsDir, alert)
+	c.Redirect(http.StatusSeeOther, "/alerts")
+}
 
 // handleAlertTest sends a fixed "this is a test" message using the
 // currently-saved config. Result is shown via ?test=ok|error=... on

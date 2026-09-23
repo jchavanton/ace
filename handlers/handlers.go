@@ -60,6 +60,7 @@ func (s *Server) Register(r *gin.Engine) {
 	r.POST("/alerts/config", s.handleAlertConfigSave)
 	r.POST("/alerts/test", s.handleAlertTest)
 	r.POST("/alerts/retention", s.handleAlertsRetentionSave)
+	r.POST("/alerts/clear/:name", s.handleAlertClear)
 	r.POST("/runs/retention", s.handleRunsRetentionSave)
 	r.POST("/runs/cleanup", s.handleRunsCleanupNow)
 }
