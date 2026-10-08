@@ -140,10 +140,10 @@ func DeleteScenarioPorts(dir, name string) error {
 //
 // Each min_ field is 0 = "disabled, no check." A non-zero value is the
 // minimum voice duration in milliseconds that must have been sampled
-// in the given direction, across every rtp_stats block of every call
-// in the run. ms is converted to a frame count at check time using
-// SamplerPeriodMs — keeping the config in ms means a cadence change
-// in voip_patrol doesn't retroactively invalidate stored thresholds.
+// in the given direction by each call in the run. ms is converted to a
+// frame count at check time using SamplerPeriodMs — keeping the config
+// in ms means a cadence change in voip_patrol doesn't retroactively
+// invalidate stored thresholds.
 // Any shortfall downgrades the call's result from PASS to FAIL and
 // appends the shortfall to its reason.
 type ScenarioVerdict struct {
@@ -280,9 +280,8 @@ func DeleteScenarioVerdict(dir, name string) error {
 //   - Zero thresholds = no check; returns (true, "").
 //   - Non-zero threshold on a call with no rtp_stats = fail (sampler
 //     never ran, which is the whole point of configuring the verdict).
-//   - Threshold compared against every rtp_stats block's direction;
-//     the lowest value wins. This matches "did audio flow for every
-//     media session?", not "did any session see audio."
+//   - Thresholds are compared against the call's last rtp_stats block,
+//     which holds the whole call's totals.
 func (v ScenarioVerdict) Apply(call *CallResult) (bool, string) {
 	if v.IsZero() {
 		return true, ""
@@ -295,74 +294,41 @@ func (v ScenarioVerdict) Apply(call *CallResult) (bool, string) {
 	if len(call.RTPStats) == 0 {
 		return false, "no rtp_stats produced; is energy_stats=\"true\" set on the action?"
 	}
-	// Reduce every rtp_stats block to one worst-case value per
-	// direction, per metric. "Worst" is min for floor checks (voice
-	// frames, level_avg, min-level_peak) and max for ceiling checks
-	// (max-level_peak). We walk the slice once and track both ends
-	// of what we need; `-1` marks "not yet seen a sample" to
-	// distinguish from a legitimate zero.
-	rxFramesMin, txFramesMin := -1, -1
-	rxAvgMin, txAvgMin := -1, -1
-	rxPeakMin, txPeakMin := -1, -1
-	rxPeakMax, txPeakMax := -1, -1
-	for _, s := range call.RTPStats {
-		if rxFramesMin < 0 || s.Rx.VoiceFrames < rxFramesMin {
-			rxFramesMin = s.Rx.VoiceFrames
-		}
-		if txFramesMin < 0 || s.Tx.VoiceFrames < txFramesMin {
-			txFramesMin = s.Tx.VoiceFrames
-		}
-		if rxAvgMin < 0 || s.Rx.LevelAvg < rxAvgMin {
-			rxAvgMin = s.Rx.LevelAvg
-		}
-		if txAvgMin < 0 || s.Tx.LevelAvg < txAvgMin {
-			txAvgMin = s.Tx.LevelAvg
-		}
-		if rxPeakMin < 0 || s.Rx.LevelPeak < rxPeakMin {
-			rxPeakMin = s.Rx.LevelPeak
-		}
-		if txPeakMin < 0 || s.Tx.LevelPeak < txPeakMin {
-			txPeakMin = s.Tx.LevelPeak
-		}
-		if s.Rx.LevelPeak > rxPeakMax {
-			rxPeakMax = s.Rx.LevelPeak
-		}
-		if s.Tx.LevelPeak > txPeakMax {
-			txPeakMax = s.Tx.LevelPeak
-		}
-	}
-	rxMs := rxFramesMin * SamplerPeriodMs
-	txMs := txFramesMin * SamplerPeriodMs
+	// Peak is the call's running max, avg its call-wide mean (see EnergyStats).
+	last := call.EnergyStats()
+	rx, tx := last.Rx, last.Tx
+	rxMs := rx.VoiceFrames * SamplerPeriodMs
+	txMs := tx.VoiceFrames * SamplerPeriodMs
 	var reasons []string
 	if v.MinRxVoiceMs > 0 && rxMs < v.MinRxVoiceMs {
-		reasons = append(reasons, fmt.Sprintf("rx voice=%dms (%d frames) below min=%dms", rxMs, rxFramesMin, v.MinRxVoiceMs))
+		reasons = append(reasons, fmt.Sprintf("rx voice=%dms (%d frames) below min=%dms", rxMs, rx.VoiceFrames, v.MinRxVoiceMs))
 	}
 	if v.MinTxVoiceMs > 0 && txMs < v.MinTxVoiceMs {
-		reasons = append(reasons, fmt.Sprintf("tx voice=%dms (%d frames) below min=%dms", txMs, txFramesMin, v.MinTxVoiceMs))
+		reasons = append(reasons, fmt.Sprintf("tx voice=%dms (%d frames) below min=%dms", txMs, tx.VoiceFrames, v.MinTxVoiceMs))
 	}
-	if v.MinRxLevelAvg > 0 && rxAvgMin < v.MinRxLevelAvg {
+	if v.MinRxLevelAvg > 0 && rx.LevelAvg < v.MinRxLevelAvg {
 		reasons = append(reasons, fmt.Sprintf("rx level_avg=%d below min=%d (%d vs %d dBov)",
-			rxAvgMin, v.MinRxLevelAvg, levelToDBov(rxAvgMin), levelToDBov(v.MinRxLevelAvg)))
+			rx.LevelAvg, v.MinRxLevelAvg, levelToDBov(rx.LevelAvg), levelToDBov(v.MinRxLevelAvg)))
 	}
-	if v.MinTxLevelAvg > 0 && txAvgMin < v.MinTxLevelAvg {
+	if v.MinTxLevelAvg > 0 && tx.LevelAvg < v.MinTxLevelAvg {
 		reasons = append(reasons, fmt.Sprintf("tx level_avg=%d below min=%d (%d vs %d dBov)",
-			txAvgMin, v.MinTxLevelAvg, levelToDBov(txAvgMin), levelToDBov(v.MinTxLevelAvg)))
+			tx.LevelAvg, v.MinTxLevelAvg, levelToDBov(tx.LevelAvg), levelToDBov(v.MinTxLevelAvg)))
 	}
-	if v.MinRxLevelPeak > 0 && rxPeakMin < v.MinRxLevelPeak {
+	if v.MinRxLevelPeak > 0 && rx.LevelPeak < v.MinRxLevelPeak {
 		reasons = append(reasons, fmt.Sprintf("rx level_peak=%d below min=%d (%d vs %d dBov)",
-			rxPeakMin, v.MinRxLevelPeak, levelToDBov(rxPeakMin), levelToDBov(v.MinRxLevelPeak)))
+			rx.LevelPeak, v.MinRxLevelPeak, levelToDBov(rx.LevelPeak), levelToDBov(v.MinRxLevelPeak)))
 	}
-	if v.MinTxLevelPeak > 0 && txPeakMin < v.MinTxLevelPeak {
+	if v.MinTxLevelPeak > 0 && tx.LevelPeak < v.MinTxLevelPeak {
 		reasons = append(reasons, fmt.Sprintf("tx level_peak=%d below min=%d (%d vs %d dBov)",
-			txPeakMin, v.MinTxLevelPeak, levelToDBov(txPeakMin), levelToDBov(v.MinTxLevelPeak)))
+			tx.LevelPeak, v.MinTxLevelPeak, levelToDBov(tx.LevelPeak), levelToDBov(v.MinTxLevelPeak)))
 	}
-	if v.MaxRxLevelPeak > 0 && rxPeakMax > v.MaxRxLevelPeak {
+	if v.MaxRxLevelPeak > 0 && rx.LevelPeak > v.MaxRxLevelPeak {
 		reasons = append(reasons, fmt.Sprintf("rx level_peak=%d above max=%d (%d vs %d dBov, clipping)",
-			rxPeakMax, v.MaxRxLevelPeak, levelToDBov(rxPeakMax), levelToDBov(v.MaxRxLevelPeak)))
+			rx.LevelPeak, v.MaxRxLevelPeak, levelToDBov(rx.LevelPeak), levelToDBov(v.MaxRxLevelPeak)))
 	}
-	if v.MaxTxLevelPeak > 0 && txPeakMax > v.MaxTxLevelPeak {
+	if v.MaxTxLevelPeak > 0 && tx.LevelPeak > v.MaxTxLevelPeak {
 		reasons = append(reasons, fmt.Sprintf("tx level_peak=%d above max=%d (%d vs %d dBov, clipping)",
-			txPeakMax, v.MaxTxLevelPeak, levelToDBov(txPeakMax), levelToDBov(v.MaxTxLevelPeak)))
+			tx.LevelPeak, v.MaxTxLevelPeak, levelToDBov(tx.LevelPeak), levelToDBov(v.MaxTxLevelPeak)))
 	}
 	if len(reasons) == 0 {
 		return true, ""

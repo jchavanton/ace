@@ -114,13 +114,13 @@
         {{ range $c.RTPStats }}{{ printf "%.2f / %.2f" .Rx.MosLQ .Tx.MosLQ }}{{ end }}
       </td>
       <td class="text-end small text-muted">
-        {{ range $c.RTPStats }}{{ if or .Rx.VoiceFrames .Tx.VoiceFrames }}{{ mul .Rx.VoiceFrames 100 }} / {{ mul .Tx.VoiceFrames 100 }} ms{{ end }}{{ end }}
+        {{ with $c.EnergyStats }}{{ if or .Rx.VoiceFrames .Tx.VoiceFrames }}{{ mul .Rx.VoiceFrames 100 }} / {{ mul .Tx.VoiceFrames 100 }} ms{{ end }}{{ end }}
       </td>
       <td class="text-end small text-muted">
-        {{ range $c.RTPStats }}{{ if or .Rx.LevelAvg .Tx.LevelAvg }}{{ .Rx.LevelAvg }} / {{ .Tx.LevelAvg }}{{ end }}{{ end }}
+        {{ with $c.EnergyStats }}{{ if or .Rx.LevelAvg .Tx.LevelAvg }}{{ .Rx.LevelAvg }} / {{ .Tx.LevelAvg }}{{ end }}{{ end }}
       </td>
       <td class="text-end small text-muted">
-        {{ range $c.RTPStats }}{{ if or .Rx.LevelPeak .Tx.LevelPeak }}{{ .Rx.LevelPeak }} / {{ .Tx.LevelPeak }}{{ end }}{{ end }}
+        {{ with $c.EnergyStats }}{{ if or .Rx.LevelPeak .Tx.LevelPeak }}{{ .Rx.LevelPeak }} / {{ .Tx.LevelPeak }}{{ end }}{{ end }}
       </td>
       <td class="font-monospace small text-muted">{{ $c.CallID }}</td>
     </tr>

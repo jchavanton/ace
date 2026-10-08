@@ -83,6 +83,16 @@ type SIPLatency struct {
 	Invite200Ms int `json:"invite200Ms"`
 }
 
+// EnergyStats is the call's last rtp_stats block. voip_patrol keeps one set
+// of energy counters per call and writes the running totals into every
+// block, so the last one covers the whole call. Zero when there is none.
+func (c CallResult) EnergyStats() RTPStats {
+	if len(c.RTPStats) == 0 {
+		return RTPStats{}
+	}
+	return c.RTPStats[len(c.RTPStats)-1]
+}
+
 // RTPStats mirrors one entry of voip_patrol's "rtp_stats" array.
 type RTPStats struct {
 	RTT             int          `json:"rtt"`
@@ -130,9 +140,9 @@ type Aggregate struct {
 	PacketsLossTx int     `json:"packets_loss_tx"`
 	// Audio-energy aggregates. All zero when no call in the run had
 	// energy_stats enabled, so the UI can hide the panel. VoiceMs is
-	// voice_frames * sampler-period averaged across every rtp_stats
-	// block that reported a non-zero sample count. LevelAvg / LevelPeak
-	// are the mean of per-stream averages / peaks on the 0..255 scale.
+	// voice_frames * sampler-period averaged across the calls that
+	// reported energy data. LevelAvg / LevelPeak are the mean of per-call
+	// averages / the max of per-call peaks on the 0..255 scale.
 	VoiceAvgRxMs int `json:"voice_avg_rx_ms,omitempty"`
 	VoiceAvgTxMs int `json:"voice_avg_tx_ms,omitempty"`
 	LevelAvgRx   int `json:"level_avg_rx,omitempty"`

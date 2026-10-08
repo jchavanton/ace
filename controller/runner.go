@@ -597,10 +597,10 @@ func aggregate(calls []models.CallResult) models.Aggregate {
 		rttSum    = 0
 		rttN      = 0
 		mosN      = 0
-		// Energy totals: average of per-stream averages, max of
-		// per-stream peaks. energyN counts only streams that reported
-		// sampling (voice_frames > 0 or level_avg/peak > 0) so a run
-		// without energy_stats stays at zero and the UI hides the panel.
+		// Energy totals: average of per-call averages, max of per-call
+		// peaks. energyN counts only calls that reported sampling
+		// (voice_frames > 0 or level_avg/peak > 0) so a run without
+		// energy_stats stays at zero and the UI hides the panel.
 		voiceFramesRx = 0
 		voiceFramesTx = 0
 		levelAvgRxSum = 0
@@ -629,24 +629,24 @@ func aggregate(calls []models.CallResult) models.Aggregate {
 				rttN++
 			}
 			agg.PacketsLossTx += rs.Tx.Loss
-			// Count a stream as energy-sampled if either direction
-			// reported any level or voice-frame data. Zero everywhere
-			// means energy_stats wasn't on this call.
-			if rs.Rx.VoiceFrames > 0 || rs.Tx.VoiceFrames > 0 ||
-				rs.Rx.LevelAvg > 0 || rs.Tx.LevelAvg > 0 ||
-				rs.Rx.LevelPeak > 0 || rs.Tx.LevelPeak > 0 {
-				voiceFramesRx += rs.Rx.VoiceFrames
-				voiceFramesTx += rs.Tx.VoiceFrames
-				levelAvgRxSum += rs.Rx.LevelAvg
-				levelAvgTxSum += rs.Tx.LevelAvg
-				if rs.Rx.LevelPeak > levelPeakRx {
-					levelPeakRx = rs.Rx.LevelPeak
-				}
-				if rs.Tx.LevelPeak > levelPeakTx {
-					levelPeakTx = rs.Tx.LevelPeak
-				}
-				energyN++
+		}
+		// A call counts once, by its whole-call totals (EnergyStats). Zero
+		// everywhere means energy_stats wasn't on this call.
+		rs := c.EnergyStats()
+		if rs.Rx.VoiceFrames > 0 || rs.Tx.VoiceFrames > 0 ||
+			rs.Rx.LevelAvg > 0 || rs.Tx.LevelAvg > 0 ||
+			rs.Rx.LevelPeak > 0 || rs.Tx.LevelPeak > 0 {
+			voiceFramesRx += rs.Rx.VoiceFrames
+			voiceFramesTx += rs.Tx.VoiceFrames
+			levelAvgRxSum += rs.Rx.LevelAvg
+			levelAvgTxSum += rs.Tx.LevelAvg
+			if rs.Rx.LevelPeak > levelPeakRx {
+				levelPeakRx = rs.Rx.LevelPeak
 			}
+			if rs.Tx.LevelPeak > levelPeakTx {
+				levelPeakTx = rs.Tx.LevelPeak
+			}
+			energyN++
 		}
 	}
 	agg.Invite200P50 = percentile(invite200, 50)
