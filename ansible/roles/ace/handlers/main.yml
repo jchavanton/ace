@@ -1,5 +1,7 @@
 ---
 - name: restart ace
+  # Same as the "docker compose up" task: the login user may not be in the docker group.
+  become: true
   ansible.builtin.command:
     cmd: docker compose up -d
     chdir: "{{ ace_install_dir }}"

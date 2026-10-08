@@ -116,6 +116,11 @@ func SaveScenarioPorts(dir, name string, p ScenarioPorts) error {
 		tmp.Close()
 		return err
 	}
+	// CreateTemp makes the file 0600; keep it readable like the scenario XML.
+	if err := tmp.Chmod(0o644); err != nil {
+		tmp.Close()
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
@@ -253,6 +258,11 @@ func SaveScenarioVerdict(dir, name string, v ScenarioVerdict) error {
 	enc := json.NewEncoder(tmp)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(v); err != nil {
+		tmp.Close()
+		return err
+	}
+	// CreateTemp makes the file 0600; keep it readable like the scenario XML.
+	if err := tmp.Chmod(0o644); err != nil {
 		tmp.Close()
 		return err
 	}

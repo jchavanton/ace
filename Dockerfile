@@ -51,8 +51,8 @@ RUN cd /git/voip_patrol \
 RUN cd /git/voip_patrol \
     && cp include/config_site.h pjproject/pjlib/include/pj/config_site.h \
     && cd pjproject && ./configure --disable-libwebrtc --disable-opencore-amr \
-    && make dep && make && make install \
-    && cd .. && cmake CMakeLists.txt && make
+    && make dep && make -j"$(nproc)" && make install \
+    && cd .. && cmake CMakeLists.txt && make -j"$(nproc)"
 
 # --- Stage 2: ace -------------------------------------------------------------
 FROM golang:1.22-bookworm AS ace_builder
