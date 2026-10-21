@@ -1,5 +1,11 @@
 # ace — voip_patrol controller (v1 spec)
 
+> **Historical.** This file describes the v1 design. The code has moved
+> on: concurrent runs are now supported (by SIP/RTP port allocation),
+> and scheduled bots, alerts, firewall UI, Prometheus metrics, and
+> retention sweeps have landed since. See `README.md` for current
+> behaviour. Kept for context on original intent.
+
 WWI fighter-ace small admin UI that runs `voip_patrol` scenarios and shows
 results.
 
