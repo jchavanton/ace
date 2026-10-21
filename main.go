@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Julien Chavanton <jchavanton@gmail.com>
+// SPDX-License-Identifier: Apache-2.0
+
 // Command ace is the voip_patrol controller: a small admin UI that
 // lists scenario XML files, runs them via the voip_patrol binary,
 // parses results, and shows per-call pass/fail + RTP/SIP stats.

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Julien Chavanton <jchavanton@gmail.com>
+// SPDX-License-Identifier: Apache-2.0
+
 // Package controller drives voip_patrol: spawns the binary, captures
 // its stdout/stderr + results.json, parses the per-call JSON, computes
 // aggregates, and persists everything under $RunsDir/<run-id>/.

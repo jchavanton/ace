@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Julien Chavanton <jchavanton@gmail.com>
+// SPDX-License-Identifier: Apache-2.0
+
 // Package models holds the in-memory representations of scenarios and
 // run records. Both are persisted to the filesystem (XML for scenarios,
 // JSON for run records); the structs are what handlers and templates

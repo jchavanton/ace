@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Julien Chavanton <jchavanton@gmail.com>
+// SPDX-License-Identifier: Apache-2.0
+
 // Package metrics registers ace's prometheus collectors and exposes a
 // small Observe helper the runner calls when a run finishes.
 //

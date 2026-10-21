@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Julien Chavanton <jchavanton@gmail.com>
+// SPDX-License-Identifier: Apache-2.0
+
 // Package handlers wires the gin routes for the ace admin UI.
 package handlers
 

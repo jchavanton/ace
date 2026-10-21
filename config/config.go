@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Julien Chavanton <jchavanton@gmail.com>
+// SPDX-License-Identifier: Apache-2.0
+
 // Package config holds runtime configuration for the ace controller.
 //
 // Configuration is set at startup via flags; there is no runtime reload.

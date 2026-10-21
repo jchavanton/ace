@@ -77,3 +77,9 @@ printf '%s\n' "$body" | jq -r '.run.calls[]? | "\(.label): \(.result) \(.reason 
   serves them via `<audio>` playback.
 - `results.json` is append-only inside voip_patrol; we set cwd per-run
   so each run gets its own clean file under `runs/<id>/`.
+
+## License
+
+Copyright (C) 2026 Julien Chavanton <jchavanton@gmail.com>
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
