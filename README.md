@@ -4,7 +4,7 @@
   <img src="static/logo.png" alt="ace logo" width="200">
 </p>
 
-Orchestration for `voip_patrol`. Schedules scenarios as recurring
+Orchestration for [voip_patrol](https://github.com/jchavanton/voip_patrol). Schedules scenarios as recurring
 "bots", runs them (concurrently where ports permit), evaluates verdicts
 on the output, fires and recovers alerts over SMTP, exposes Prometheus
 metrics, sweeps old state on a timer, and manages the host's iptables
