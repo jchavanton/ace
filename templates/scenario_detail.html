@@ -15,12 +15,23 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h1 class="h3 mb-0">{{ .Scenario.Name }}</h1>
   <div class="row row-cols-lg-auto g-2 align-items-center d-inline-flex">
+    <div class="col-auto">
+      <!-- Hidden marker so the server can distinguish "this form has
+           the Auto control" from the list-view Run button (no field
+           at all). Without this, an unchecked box submits nothing and
+           looks identical to the list-view post. -->
+      <input type="hidden" form="scenario-form" name="auto_ports_present" value="1">
+      <div class="form-check form-check-inline" title="When checked, the runner picks a free SIP port (step +2) and a free 100-port RTP window at Start time. Uncheck to pin the values below.">
+        <input class="form-check-input" type="checkbox" form="scenario-form" name="auto_ports" id="auto_ports" value="1"{{ if .AutoPorts }} checked{{ end }}>
+        <label class="form-check-label small" for="auto_ports">Auto</label>
+      </div>
+    </div>
     <div class="col-auto"><label class="col-form-label small text-muted">SIP</label></div>
-    <div class="col-auto"><input type="number" form="scenario-form" name="sip_port" value="{{ .DefaultSIPPort }}" min="1024" max="65535" class="form-control form-control-sm" style="width:6em"></div>
+    <div class="col-auto"><input type="number" form="scenario-form" name="sip_port" value="{{ .DefaultSIPPort }}" min="1024" max="65535" class="form-control form-control-sm port-input" style="width:6em"></div>
     <div class="col-auto"><label class="col-form-label small text-muted">RTP</label></div>
-    <div class="col-auto"><input type="number" form="scenario-form" name="rtp_start" value="{{ .DefaultRTPStart }}" min="1024" max="65535" class="form-control form-control-sm" style="width:6em"></div>
+    <div class="col-auto"><input type="number" form="scenario-form" name="rtp_start" value="{{ .DefaultRTPStart }}" min="1024" max="65535" class="form-control form-control-sm port-input" style="width:6em"></div>
     <div class="col-auto"><span class="small text-muted">–</span></div>
-    <div class="col-auto"><input type="number" form="scenario-form" name="rtp_end" value="{{ .DefaultRTPEnd }}" min="1024" max="65535" class="form-control form-control-sm" style="width:6em"></div>
+    <div class="col-auto"><input type="number" form="scenario-form" name="rtp_end" value="{{ .DefaultRTPEnd }}" min="1024" max="65535" class="form-control form-control-sm port-input" style="width:6em"></div>
     <div class="col-auto"><label class="col-form-label small text-muted" title="Wall-clock cap on this run in seconds. 0 = unlimited. Blank = fall back to the runner default.">Timeout (s)</label></div>
     <div class="col-auto"><input type="number" form="scenario-form" name="timeout_seconds" value="{{ if eq .DefaultTimeout -1 }}0{{ else if .DefaultTimeout }}{{ .DefaultTimeout }}{{ end }}" min="0" max="86400" placeholder="∞" class="form-control form-control-sm" style="width:6em"></div>
     <div class="col-auto"><label class="col-form-label small text-muted" title="Restrict voip_patrol's SIP listener. Default = mixed (scenario XML picks per action). TLS is per-action in the XML — the flag is a saved preference only.">Transport</label></div>
@@ -197,6 +208,17 @@
       'Ctrl-S': function () { document.getElementById('scenario-form').requestSubmit(); },
       'Cmd-S':  function () { document.getElementById('scenario-form').requestSubmit(); },
     });
+  })();
+
+  // Auto-ports checkbox: grey out the SIP/RTP inputs when checked so
+  // the UI matches what the backend does (ignores typed values).
+  (function () {
+    const cb = document.getElementById('auto_ports');
+    if (!cb) return;
+    const inputs = document.querySelectorAll('.port-input');
+    const sync = () => inputs.forEach(i => { i.disabled = cb.checked; });
+    cb.addEventListener('change', sync);
+    sync();
   })();
 </script>
 {{ end }}

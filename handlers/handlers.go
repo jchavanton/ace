@@ -209,6 +209,12 @@ func (s *Server) handleScenarioDetail(c *gin.Context) {
 		// HasSavedPorts controls whether the "Reset saved ports" hint
 		// shows next to the Save button.
 		"HasSavedPorts": scn.Ports != (models.ScenarioPorts{}),
+		// AutoPorts drives the "pick free ports automatically" checkbox.
+		// Default-on when the sidecar has no SIP/RTP pins — the runner
+		// will walk free SIP (+2) and RTP (+100) windows at Start time.
+		// Off when the sidecar has pinned values, so the operator sees
+		// their saved choice applied verbatim.
+		"AutoPorts": scn.Ports.SIP == 0 && scn.Ports.RTPPortStart == 0 && scn.Ports.RTPPortEnd == 0,
 		// Verdict thresholds and the "XML missing energy_stats" warning
 		// flag. The flag is a cheap substring check — operators can
 		// easily beat it with comments or attribute quoting variants,
@@ -265,14 +271,35 @@ func (s *Server) startScenarioRun(c *gin.Context) (*models.Run, int, error) {
 	if err != nil {
 		return nil, http.StatusBadRequest, err
 	}
-	if ports.SIP == 0 {
-		ports.SIP = scn.Ports.SIP
+	// Auto-ports resolution:
+	//   - Detail-page Run always posts auto_ports_present=1 plus either
+	//     auto_ports=1 (checked) or no auto_ports field (unchecked). The
+	//     marker lets us distinguish "unchecked" from the list view's
+	//     empty POST — HTML checkboxes submit nothing when off.
+	//   - List-view Run has no auto_ports_present. Infer auto mode from
+	//     the sidecar: no SIP/RTP pin → auto, pinned → honor the pin.
+	// Any typed form value (sip_port / rtp_start / rtp_end non-zero)
+	// still overrides — explicit user input wins over the mode.
+	var autoPorts bool
+	if c.PostForm("auto_ports_present") != "" {
+		autoPorts = c.PostForm("auto_ports") != ""
+	} else {
+		autoPorts = scn.Ports.SIP == 0 && scn.Ports.RTPPortStart == 0 && scn.Ports.RTPPortEnd == 0
 	}
-	if ports.RTPPortStart == 0 {
-		ports.RTPPortStart = scn.Ports.RTPPortStart
-	}
-	if ports.RTPPortEnd == 0 {
-		ports.RTPPortEnd = scn.Ports.RTPPortEnd
+	if autoPorts {
+		ports.SIP = 0
+		ports.RTPPortStart = 0
+		ports.RTPPortEnd = 0
+	} else {
+		if ports.SIP == 0 {
+			ports.SIP = scn.Ports.SIP
+		}
+		if ports.RTPPortStart == 0 {
+			ports.RTPPortStart = scn.Ports.RTPPortStart
+		}
+		if ports.RTPPortEnd == 0 {
+			ports.RTPPortEnd = scn.Ports.RTPPortEnd
+		}
 	}
 	if ports.PublicAddress == "" {
 		ports.PublicAddress = scn.Ports.PublicAddress
@@ -499,6 +526,15 @@ func (s *Server) handleScenarioSave(c *gin.Context) {
 	if err != nil {
 		c.String(http.StatusBadRequest, "%v", err)
 		return
+	}
+	// Auto-ports checkbox: when set, discard any typed SIP/RTP so the
+	// sidecar doesn't pin them. The runner will auto-pick a free pair
+	// at Start time. Other sidecar fields (public_address, timeout,
+	// transport, nameservers) are unaffected.
+	if c.PostForm("auto_ports") != "" {
+		ports.SIP = 0
+		ports.RTPPortStart = 0
+		ports.RTPPortEnd = 0
 	}
 	// Only allow saving over existing scenarios via this route. Creation
 	// goes through POST /scenarios.

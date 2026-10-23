@@ -155,6 +155,94 @@ func rangesOverlap(a1, a2, b1, b2 int) bool {
 	return a1 <= b2 && b1 <= a2
 }
 
+// Hard-coded gaps for auto-port allocation. voip_patrol binds one SIP
+// socket but may open an adjacent one for TCP/TLS, so SIP advances by 2.
+// RTP windows are 100 ports wide, matching the per-run slice size.
+const (
+	autoSIPGap = 2
+	autoRTPGap = 100
+)
+
+// pinnedReservations collects every scenario sidecar's pinned SIP /
+// RTP values. These are treated as permanent reservations: auto-pick
+// skips over them even when the owning scenario isn't currently
+// running, so a non-auto scenario can always Run on its chosen ports.
+// Errors reading the dir are swallowed — a missing/unreadable sidecar
+// just means no reservation from it.
+func (r *Runner) pinnedReservations() (sipPorts map[int]struct{}, rtpRanges [][2]int) {
+	sipPorts = map[int]struct{}{}
+	scns, err := models.LoadScenarios(r.Cfg.ScenariosDir)
+	if err != nil {
+		return
+	}
+	for _, s := range scns {
+		if s.Ports.SIP != 0 {
+			sipPorts[s.Ports.SIP] = struct{}{}
+		}
+		if s.Ports.RTPPortStart != 0 && s.Ports.RTPPortEnd != 0 {
+			rtpRanges = append(rtpRanges, [2]int{s.Ports.RTPPortStart, s.Ports.RTPPortEnd})
+		}
+	}
+	return
+}
+
+// pickFreeSIPPort walks SIP ports starting at base, stepping by
+// autoSIPGap, and returns the first one not held by an active run and
+// not reserved by any scenario sidecar's pinned value. Caller must
+// hold activeMu. Returns an error if nothing fits before hitting
+// 65535.
+func (r *Runner) pickFreeSIPPort(base int) (int, error) {
+	pinnedSIP, _ := r.pinnedReservations()
+	for p := base; p <= 65535; p += autoSIPGap {
+		if _, taken := pinnedSIP[p]; taken {
+			continue
+		}
+		busy := false
+		for _, a := range r.active {
+			if a.sipPort == p {
+				busy = true
+				break
+			}
+		}
+		if !busy {
+			return p, nil
+		}
+	}
+	return 0, fmt.Errorf("no free SIP port available starting at %d (step %d)", base, autoSIPGap)
+}
+
+// pickFreeRTPWindow walks 100-wide RTP windows starting at base,
+// stepping by autoRTPGap, and returns the first [start,end] that
+// doesn't overlap any active run or any scenario sidecar's pinned
+// range. Caller must hold activeMu. poolEnd caps where the window
+// may extend to (the configured RTP pool end).
+func (r *Runner) pickFreeRTPWindow(base, poolEnd int) (int, int, error) {
+	_, pinnedRTP := r.pinnedReservations()
+	width := autoRTPGap - 1
+	for start := base; start+width <= poolEnd; start += autoRTPGap {
+		end := start + width
+		overlap := false
+		for _, a := range r.active {
+			if rangesOverlap(start, end, a.rtpPortStart, a.rtpPortEnd) {
+				overlap = true
+				break
+			}
+		}
+		if !overlap {
+			for _, rng := range pinnedRTP {
+				if rangesOverlap(start, end, rng[0], rng[1]) {
+					overlap = true
+					break
+				}
+			}
+		}
+		if !overlap {
+			return start, end, nil
+		}
+	}
+	return 0, 0, fmt.Errorf("no free RTP window of %d ports available in [%d,%d]", autoRTPGap, base, poolEnd)
+}
+
 // Stop cancels the specified in-flight run's voip_patrol process.
 // Returns an error if id doesn't match a currently-active run (so a
 // stale browser tab firing /runs/<old-id>/stop can't kill an
@@ -284,6 +372,11 @@ func (r *Runner) Start(scenario *models.Scenario, startedBy string, ports Ports)
 // on the run (e.g. "bot:nightly"). Interactive callers use Start (blank
 // trigger); the bot scheduler passes its bot name here.
 func (r *Runner) StartWithTrigger(scenario *models.Scenario, startedBy, triggeredBy string, ports Ports) (*models.Run, error) {
+	// autoSIP / autoRTP track whether the caller left the field unset.
+	// Unset = pick a free port automatically on collision; explicit =
+	// honor the exact value and fail if it clashes (current behavior).
+	autoSIP := ports.SIP == 0
+	autoRTP := ports.RTPPortStart == 0 && ports.RTPPortEnd == 0
 	sip := firstNonZero(ports.SIP, r.Cfg.VoipPatrolPort)
 	rtpStart := firstNonZero(ports.RTPPortStart, r.Cfg.RTPPortStart)
 	rtpEnd := firstNonZero(ports.RTPPortEnd, r.Cfg.RTPPortEnd)
@@ -321,6 +414,20 @@ func (r *Runner) StartWithTrigger(scenario *models.Scenario, startedBy, triggere
 	// canAllocate + insert must be atomic; two concurrent Starts must
 	// not both pass the check and both register.
 	r.activeMu.Lock()
+	// Auto-allocate on collision for fields the caller left unset.
+	// Explicit ports still fail-fast — users who typed a port in the
+	// Run form want to know their choice is taken, not have it silently
+	// rewritten.
+	if autoSIP {
+		if p, err := r.pickFreeSIPPort(r.Cfg.VoipPatrolPort); err == nil {
+			sip = p
+		}
+	}
+	if autoRTP {
+		if s, e, err := r.pickFreeRTPWindow(r.Cfg.RTPPortStart, r.Cfg.RTPPortEnd); err == nil {
+			rtpStart, rtpEnd = s, e
+		}
+	}
 	if err := r.canAllocate(sip, rtpStart, rtpEnd); err != nil {
 		r.activeMu.Unlock()
 		cancel()
