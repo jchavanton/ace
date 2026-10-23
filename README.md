@@ -5,10 +5,9 @@
 </p>
 
 Orchestration for [voip_patrol](https://github.com/jchavanton/voip_patrol). Schedules scenarios as recurring
-"bots", runs them (concurrently where ports permit), evaluates verdicts
+"bots", runs them, evaluates verdicts
 on the output, fires and recovers alerts over SMTP, exposes Prometheus
-metrics, sweeps old state on a timer, and manages the host's iptables
-rules. A browser UI and a small JSON API drive the same engine.
+metrics. A browser UI and a small JSON API drive the same engine.
 
 Design notes (historical) in [SPEC.md](SPEC.md).
 
