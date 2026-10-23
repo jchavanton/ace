@@ -33,16 +33,16 @@
             {{ if and .Enabled (not .NextRunAt.IsZero) }}{{ .NextRunAt.Format "2006-01-02 15:04:05" }}{{ end }}
           </td>
           <td class="text-end">
-            <a href="/bots/{{ .Name }}/report" class="btn btn-sm btn-outline-info">Report</a>
+            <a href="/bots/{{ .Name }}/report" class="btn btn-xs btn-outline-info">Report</a>
             <form method="post" action="/bots/{{ .Name }}/run" class="d-inline">
-              <button class="btn btn-sm btn-outline-primary">Run</button>
+              <button class="btn btn-xs btn-outline-primary">Run</button>
             </form>
             <form method="post" action="/bots/{{ .Name }}/toggle" class="d-inline">
-              <button class="btn btn-sm btn-outline-secondary">{{ if .Enabled }}Pause{{ else }}Enable{{ end }}</button>
+              <button class="btn btn-xs btn-outline-secondary">{{ if .Enabled }}Pause{{ else }}Enable{{ end }}</button>
             </form>
             <form method="post" action="/bots/{{ .Name }}/delete" class="d-inline"
                   onsubmit="return confirm('Delete bot {{ .Name }}?');">
-              <button class="btn btn-sm btn-outline-danger">Delete</button>
+              <button class="btn btn-xs btn-outline-danger">Delete</button>
             </form>
           </td>
         </tr>
