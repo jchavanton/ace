@@ -39,6 +39,15 @@ type AlertConfig struct {
 	AlertsRetentionCount int       `json:"alerts_retention_count,omitempty"`
 	LastCleanupAt        time.Time `json:"last_cleanup_at,omitempty"`
 	LastCleanupSummary   string    `json:"last_cleanup_summary,omitempty"`
+
+	// Host-level alert thresholds, as a percentage (1-100). Zero =
+	// disabled (opt-in — no surprise emails after upgrade). The host
+	// monitor polls prometheus every 30s and fires through the same
+	// alert state machine as bot alerts, keyed by "host:cpu" / "host:mem"
+	// / "host:disk". Thresholds are inclusive: value >= threshold fires.
+	HostCPUThresholdPct  int `json:"host_cpu_threshold_pct,omitempty"`
+	HostMemThresholdPct  int `json:"host_mem_threshold_pct,omitempty"`
+	HostDiskThresholdPct int `json:"host_disk_threshold_pct,omitempty"`
 }
 
 // AlertState is one bot's slot in the state machine. Persisted as one

@@ -4,6 +4,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -142,6 +143,51 @@ func (s *Server) handleAlertsRetentionSave(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/alerts")
 }
 
+
+// handleAlertHostThresholdsSave persists the three host-level alert
+// thresholds (CPU / mem / disk, percent). Empty or 0 = disabled for
+// that check; 1-100 inclusive otherwise. The host monitor goroutine
+// picks the new values up on its next tick (max 30s).
+func (s *Server) handleAlertHostThresholdsSave(c *gin.Context) {
+	cfg, _ := models.LoadAlertConfig(s.Cfg.BotsDir)
+	parse := func(formKey string) (int, error) {
+		raw := strings.TrimSpace(c.PostForm(formKey))
+		if raw == "" {
+			return 0, nil
+		}
+		n, err := strconv.Atoi(raw)
+		if err != nil {
+			return 0, err
+		}
+		if n < 0 || n > 100 {
+			return 0, fmt.Errorf("must be 0-100")
+		}
+		return n, nil
+	}
+	cpu, err := parse("host_cpu_threshold_pct")
+	if err != nil {
+		c.String(http.StatusBadRequest, "host_cpu_threshold_pct: %v", err)
+		return
+	}
+	mem, err := parse("host_mem_threshold_pct")
+	if err != nil {
+		c.String(http.StatusBadRequest, "host_mem_threshold_pct: %v", err)
+		return
+	}
+	disk, err := parse("host_disk_threshold_pct")
+	if err != nil {
+		c.String(http.StatusBadRequest, "host_disk_threshold_pct: %v", err)
+		return
+	}
+	cfg.HostCPUThresholdPct = cpu
+	cfg.HostMemThresholdPct = mem
+	cfg.HostDiskThresholdPct = disk
+	if err := models.SaveAlertConfig(s.Cfg.BotsDir, cfg); err != nil {
+		c.String(http.StatusInternalServerError, "save: %v", err)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/alerts")
+}
 
 // handleAlertClear resets a bot's firing state back to "ok" without
 // waiting for a green run. Used when a scenario is persistently

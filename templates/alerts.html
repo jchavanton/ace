@@ -27,7 +27,7 @@
           <td class="font-monospace">{{ .Bot }}</td>
           <td class="small text-muted">{{ .State.LastAt.Format "2006-01-02 15:04:05" }}</td>
           <td class="text-end">{{ .State.ConsecutiveFails }}</td>
-          <td>{{ if .State.LastRunID }}<a href="/runs/{{ .State.LastRunID }}" class="font-monospace small">{{ .State.LastRunID }}</a>{{ end }}</td>
+          <td>{{ if .State.LastRunID }}<a href="/runs/{{ .State.LastRunID }}" class="font-monospace small">{{ .State.LastRunID }}</a>{{ else }}<span class="text-muted small">—</span>{{ end }}</td>
           <td class="small">{{ .State.LastReason }}</td>
           <td class="text-end">
             <form method="post" action="/alerts/clear/{{ .Bot }}" class="d-inline"
@@ -56,7 +56,7 @@
         <tr>
           <td class="small text-muted">{{ .At.Format "2006-01-02 15:04:05" }}</td>
           <td class="font-monospace">{{ .Bot }}</td>
-          <td><a href="/runs/{{ .RunID }}" class="font-monospace small">{{ .RunID }}</a></td>
+          <td>{{ if .RunID }}<a href="/runs/{{ .RunID }}" class="font-monospace small">{{ .RunID }}</a>{{ else }}<span class="text-muted small">—</span>{{ end }}</td>
           <td class="small">{{ .Reason }}</td>
         </tr>
       {{ end }}
@@ -103,6 +103,36 @@
       <div class="d-flex gap-2">
         <button class="btn btn-sm btn-primary">Save</button>
         <button class="btn btn-sm btn-outline-secondary" formaction="/alerts/test" formmethod="post">Send test email</button>
+      </div>
+    </form>
+
+    <h2 class="h5 mt-4">Host thresholds</h2>
+    <form method="post" action="/alerts/host-thresholds" class="card card-body">
+      <p class="small text-muted mb-2">
+        Fire an alert when the host crosses one of these percentages.
+        Zero or blank = disabled. Checked every 30s via the local
+        prometheus; see <a href="/monitoring">/monitoring</a> for the live chart.
+      </p>
+      <div class="mb-2">
+        <label class="form-label small">CPU busy % <span class="text-muted">(suggest: 80)</span></label>
+        <input type="number" name="host_cpu_threshold_pct" min="0" max="100"
+               value="{{ if .Config.HostCPUThresholdPct }}{{ .Config.HostCPUThresholdPct }}{{ end }}"
+               class="form-control form-control-sm" placeholder="0 = disabled">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small">Memory used % <span class="text-muted">(suggest: 85)</span></label>
+        <input type="number" name="host_mem_threshold_pct" min="0" max="100"
+               value="{{ if .Config.HostMemThresholdPct }}{{ .Config.HostMemThresholdPct }}{{ end }}"
+               class="form-control form-control-sm" placeholder="0 = disabled">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small">Root disk used % <span class="text-muted">(suggest: 85)</span></label>
+        <input type="number" name="host_disk_threshold_pct" min="0" max="100"
+               value="{{ if .Config.HostDiskThresholdPct }}{{ .Config.HostDiskThresholdPct }}{{ end }}"
+               class="form-control form-control-sm" placeholder="0 = disabled">
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-primary">Save</button>
       </div>
     </form>
 

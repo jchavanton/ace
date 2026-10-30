@@ -56,6 +56,8 @@ func main() {
 	}
 	sched := &controller.Scheduler{Cfg: cfg, Runner: runner}
 	sched.Start()
+	hostMon := &controller.HostMonitor{Cfg: cfg}
+	hostMon.Start()
 	cleanup := &controller.Cleanup{Cfg: cfg, Runner: runner}
 	cleanup.Start()
 	srv.Cleanup = cleanup
