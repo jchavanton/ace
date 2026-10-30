@@ -74,6 +74,13 @@ type ScenarioPorts struct {
 	// entry on the CLI. Empty = don't pass any --nameserver, and
 	// voip_patrol falls back to the host's resolver.
 	Nameservers string `json:"nameservers,omitempty"`
+
+	// AutoRun = true starts the scenario on ace boot (started_by="auto")
+	// and re-starts it on normal completion or error, with a short
+	// backoff. Intended for UAS-style scenarios that answer calls
+	// indefinitely. Operator-initiated Stop keeps it off until ace
+	// restarts or AutoRun is toggled — a Stop click should be sticky.
+	AutoRun bool `json:"auto_run,omitempty"`
 }
 
 // PortsPath returns the absolute path to the scenario's sidecar

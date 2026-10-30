@@ -65,6 +65,15 @@
   · modified {{ .Scenario.ModTime.Format "2006-01-02 15:04:05" }}
 </p>
 
+<div class="form-check mb-3">
+  <input class="form-check-input" type="checkbox" form="scenario-form" name="auto_run" id="auto_run" value="1"{{ if .Scenario.Ports.AutoRun }} checked{{ end }}>
+  <label class="form-check-label small" for="auto_run">
+    <strong>Auto-run</strong> — start this scenario on ace boot and re-start it after it finishes.
+    Intended for UAS/server scenarios that answer calls indefinitely. An operator-initiated
+    <em>Stop</em> is sticky (won't re-launch until ace restarts or Auto-run is toggled off and on).
+  </label>
+</div>
+
 {{ if .ActiveRuns }}
 <div class="alert alert-info small py-2 mb-3">
   <strong>Ports in use:</strong>

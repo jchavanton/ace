@@ -69,6 +69,12 @@ func main() {
 	} else if n > 0 {
 		log.Printf("ace: marked %d orphaned run(s) as errored", n)
 	}
+	// Auto-runner has to come after orphan recovery so a previously
+	// in-flight auto-run has been marked errored on disk; otherwise the
+	// scenario detail page would show two overlapping "running" rows
+	// until the stale one aged out of the UI.
+	autoRun := &controller.AutoRunner{Cfg: cfg, Runner: runner}
+	autoRun.Start()
 	// Firewall management is opt-in. When enabled, load the persisted
 	// rules and push them into iptables so a container restart doesn't
 	// silently drop the operator's allow-list. Errors are logged but

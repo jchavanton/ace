@@ -37,12 +37,23 @@ type Runner struct {
 	activeMu sync.Mutex
 	active   map[string]*activeRun // keyed by Run.ID
 
-	// OnFinish, if set, is invoked from the run's goroutine after
+	// onFinish holds callbacks invoked from the run's goroutine after
 	// run.json has been persisted with its terminal status. Used by the
-	// bot scheduler to react to scheduled-run outcomes without polling.
-	// Errors thrown by the callback are swallowed — this hook is
-	// best-effort observability.
-	OnFinish func(*models.Run)
+	// bot scheduler (to react to scheduled-run outcomes) and the auto-run
+	// supervisor (to re-launch always-on scenarios). Registration goes
+	// through AddOnFinish; errors thrown by a callback are swallowed —
+	// this hook is best-effort observability.
+	onFinishMu sync.Mutex
+	onFinish   []func(*models.Run)
+}
+
+// AddOnFinish registers a callback invoked once per completed run,
+// after run.json has been written with its terminal status.
+// Thread-safe; order of invocation matches registration order.
+func (r *Runner) AddOnFinish(fn func(*models.Run)) {
+	r.onFinishMu.Lock()
+	defer r.onFinishMu.Unlock()
+	r.onFinish = append(r.onFinish, fn)
 }
 
 // activeRun is the in-memory record of a currently-executing run.
@@ -667,8 +678,11 @@ func (r *Runner) execute(ctx context.Context, cancel context.CancelFunc, run *mo
 	// metric without a run to click through to on the report page.
 	metrics.Observe(run)
 
-	if r.OnFinish != nil {
-		r.OnFinish(run)
+	r.onFinishMu.Lock()
+	hooks := append([]func(*models.Run){}, r.onFinish...)
+	r.onFinishMu.Unlock()
+	for _, fn := range hooks {
+		fn(run)
 	}
 }
 

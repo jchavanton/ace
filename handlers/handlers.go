@@ -619,6 +619,7 @@ func (s *Server) handleScenarioSave(c *gin.Context) {
 		TimeoutSeconds: ports.TimeoutSeconds,
 		Transport:      ports.Transport,
 		Nameservers:    ports.Nameservers,
+		AutoRun:        c.PostForm("auto_run") != "",
 	}
 	if sp == (models.ScenarioPorts{}) {
 		if err := models.DeleteScenarioPorts(s.Cfg.ScenariosDir, name); err != nil {

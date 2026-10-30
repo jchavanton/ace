@@ -48,9 +48,8 @@ func (s *Scheduler) Start() {
 	done := s.done
 	s.mu.Unlock()
 
-	// Register the finish hook that turns run outcomes into alerts. If
-	// another consumer of OnFinish is added later, chain them here.
-	s.Runner.OnFinish = s.onRunFinish
+	// Register the finish hook that turns run outcomes into alerts.
+	s.Runner.AddOnFinish(s.onRunFinish)
 
 	go func() {
 		t := time.NewTicker(TickInterval)
