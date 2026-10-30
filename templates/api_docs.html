@@ -106,32 +106,40 @@ echo "$r" | jq .passed</code></pre>
     <code>/api/metrics/range</code>
   </div>
   <div class="card-body">
-    <p class="mb-2">Proxy to Prometheus <code>query_range</code> for the bot-report charts. Server-side selects the PromQL based on the <code>panel</code> name — clients do not pass raw queries.</p>
+    <p class="mb-2">Proxy to Prometheus <code>query_range</code>. Server-side selects the PromQL based on the <code>panel</code> name from an allowlist — clients do not pass raw queries. Powers both the <a href="/bots">bot report</a> and <a href="/monitoring">/monitoring</a> pages.</p>
 
     <h6 class="mt-3">Query parameters</h6>
     <table class="table table-sm">
       <thead><tr><th>Name</th><th>Required</th><th>Notes</th></tr></thead>
       <tbody>
-        <tr><td><code>panel</code></td><td>yes</td><td>Panel name (see <a href="/bots">/bots</a> report page for the catalog).</td></tr>
-        <tr><td><code>started_by</code></td><td>yes</td><td>Bot name — matches the <code>started_by</code> label voip_patrol emits.</td></tr>
-        <tr><td><code>start</code></td><td>yes</td><td>RFC3339 or Unix seconds.</td></tr>
-        <tr><td><code>end</code></td><td>yes</td><td>RFC3339 or Unix seconds.</td></tr>
-        <tr><td><code>step</code></td><td>yes</td><td>Prometheus duration (e.g. <code>30s</code>, <code>5m</code>).</td></tr>
+        <tr><td><code>panel</code></td><td>yes</td><td>Panel name. Bot panels: <code>runs_rate</code>, <code>calls_rate</code>, <code>invite_p95</code>, <code>mos_rx</code>, <code>rtt_avg</code>. Host panels: <code>host_cpu</code>, <code>host_mem</code>, <code>host_disk</code>, <code>host_load1</code>, <code>host_net</code>.</td></tr>
+        <tr><td><code>started_by</code></td><td>bot panels only</td><td>Label value — typically <code>bot:&lt;name&gt;</code>. Required for bot panels; must be omitted for host panels.</td></tr>
+        <tr><td><code>range_min</code></td><td>no</td><td>Range in minutes, default 1440 (24h), max 129600 (90d). The handler derives <code>start</code>, <code>end</code>, and an adaptive <code>step</code> (floored at 15s, ceilinged at 1h).</td></tr>
       </tbody>
     </table>
 
     <h6>Response</h6>
-    <p class="small mb-2">Verbatim Prometheus <code>query_range</code> payload (<code>status</code>, <code>data.result</code>, …).</p>
+<pre class="bg-light p-2 small mb-2"><code>{
+  "panel": "host_cpu",
+  "step":  15,
+  "result": [ /* Prometheus matrix: [{ metric:{...}, values:[[ts,"v"], ...] }, ...] */ ]
+}</code></pre>
 
     <h6>Errors</h6>
     <ul class="small mb-2">
-      <li><code>400</code> — missing/invalid param or unknown panel</li>
-      <li><code>502</code> — Prometheus unreachable</li>
+      <li><code>400</code> — unknown panel, or missing/empty <code>started_by</code> on a bot panel</li>
+      <li><code>502</code> — Prometheus unreachable or returned a non-success status</li>
+      <li><code>503</code> — <code>-prometheus-url</code> not configured on this ace instance</li>
     </ul>
 
-    <h6>Example</h6>
-<pre class="bg-light p-2 small mb-0"><code>curl -u user:pass \
-  'http://host:8086/api/metrics/range?panel=call_success_rate&amp;started_by=my-bot&amp;start=2026-10-26T00:00:00Z&amp;end=2026-10-26T01:00:00Z&amp;step=30s'</code></pre>
+    <h6>Examples</h6>
+<pre class="bg-light p-2 small mb-0"><code># Bot panel (per-bot filter required)
+curl -u user:pass \
+  'http://host:8086/api/metrics/range?panel=runs_rate&amp;started_by=bot:my-bot&amp;range_min=1440'
+
+# Host panel (global, no started_by)
+curl -u user:pass \
+  'http://host:8086/api/metrics/range?panel=host_cpu&amp;range_min=60'</code></pre>
   </div>
 </div>
 

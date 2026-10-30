@@ -81,6 +81,19 @@ func (s *Server) Register(r *gin.Engine) {
 	r.POST("/runs/retention", s.handleRunsRetentionSave)
 	r.POST("/runs/cleanup", s.handleRunsCleanupNow)
 	r.GET("/api-docs", s.handleAPIDocs)
+	r.GET("/monitoring", s.handleMonitoring)
+}
+
+// handleMonitoring renders /monitoring. The template loads host CPU /
+// mem / disk / load / net panels from /api/metrics/range (no
+// started_by filter — these are global per-prometheus).
+func (s *Server) handleMonitoring(c *gin.Context) {
+	s.render(c, http.StatusOK, gin.H{
+		"Title":           "Monitoring",
+		"Page":            "monitoring",
+		"ContentTemplate": "content_monitoring",
+		"MetricsEnabled":  s.Cfg.PrometheusURL != "",
+	})
 }
 
 func (s *Server) handleAPIDocs(c *gin.Context) {

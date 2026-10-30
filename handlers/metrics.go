@@ -16,10 +16,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Named panels the /bots/:name/report page can request. Each template
-// takes a single %s placeholder for the started_by filter (a PromQL
-// label value pattern already quoted by the caller), which is how a
-// bot's dashboard scopes itself to only that bot's runs.
+// Named panels the frontend can request. Two kinds:
+//
+//   - Bot-scoped panels (/bots/:name/report) take a single %s for the
+//     started_by label value (a PromQL label value literal already
+//     quoted by the caller). The caller passes a started_by query
+//     param that fills this.
+//   - Host-scoped panels (/monitoring) are global per-prometheus and
+//     carry no %s — the caller omits started_by.
 //
 // Kept as templates rather than pre-baked queries so a future
 // `/scenarios/:name/report` page can reuse the same handler with a
@@ -48,6 +52,37 @@ var promPanels = map[string]string{
 
 	// Last-observed RTT gauge. Same treatment as MOS.
 	"rtt_avg": `max_over_time(ace_run_rtt_avg_ms_last{started_by=%s}[$__interval])`,
+
+	// Host CPU % busy across all cores. 2m irate window smooths the
+	// 15s scrape jitter without washing out real spikes.
+	"host_cpu": `100 - (avg(irate(node_cpu_seconds_total{mode="idle"}[2m])) * 100)`,
+
+	// Memory in use as a % of total. MemAvailable is kernel's own
+	// "what a new allocation could get" figure — closer to user
+	// intuition than MemFree, which ignores reclaimable caches.
+	"host_mem": `(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100`,
+
+	// Root filesystem % used. mountpoint="/" because the node_exporter
+	// excludes list already drops container/overlay mounts, but the
+	// fstype filter is kept as a belt-and-suspenders guard.
+	"host_disk": `(1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs"}) * 100`,
+
+	// 1-minute load average. Not normalized by core count — the
+	// operator reads it in context (knowing the box's core count).
+	"host_load1": `node_load1`,
+
+	// Per-NIC combined rx+tx throughput (bytes/sec). Excludes loopback,
+	// docker/veth bridges, and the k8s-style br- bridges — those add
+	// noise and would double-count traffic that also crosses eth0.
+	"host_net": `sum by (device) (irate(node_network_receive_bytes_total{device!~"lo|docker.*|veth.*|br-.*"}[2m]) + irate(node_network_transmit_bytes_total{device!~"lo|docker.*|veth.*|br-.*"}[2m]))`,
+}
+
+// panelNeedsStartedBy reports whether a panel template carries a %s
+// placeholder — i.e. whether it must be scoped by started_by. Keeps
+// the frontend / handler contract explicit: host panels do not pass
+// started_by and must not carry the placeholder, bot panels must.
+func panelNeedsStartedBy(tmpl string) bool {
+	return strings.Contains(tmpl, "%s")
 }
 
 // promMatrixResponse mirrors just the fields we need from prometheus's
@@ -84,17 +119,20 @@ func (s *Server) handleMetricsRange(c *gin.Context) {
 		return
 	}
 
-	startedBy := c.Query("started_by")
-	if startedBy == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "started_by required"})
-		return
+	query := tmpl
+	if panelNeedsStartedBy(tmpl) {
+		startedBy := c.Query("started_by")
+		if startedBy == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "started_by required"})
+			return
+		}
+		// The filter goes directly into the PromQL query; escape the two
+		// characters that could break out of the label matcher literal
+		// (backslash and double-quote). No wildcard support — a bot's
+		// started_by is a fixed "bot:<name>" string.
+		filter := `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(startedBy) + `"`
+		query = strings.ReplaceAll(tmpl, "%s", filter)
 	}
-	// The filter goes directly into the PromQL query; escape the two
-	// characters that could break out of the label matcher literal
-	// (backslash and double-quote). No wildcard support — a bot's
-	// started_by is a fixed "bot:<name>" string.
-	filter := `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(startedBy) + `"`
-	query := strings.ReplaceAll(tmpl, "%s", filter)
 
 	// Range in minutes: default 24h, cap 90d (Prometheus retention).
 	rangeMin := 24 * 60

@@ -1,0 +1,66 @@
+{{ define "content_monitoring" }}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">Monitoring</h1>
+    <div class="text-muted small">
+      Host CPU, memory, disk, load and network — scraped from node_exporter on this box.
+    </div>
+  </div>
+</div>
+
+{{ if not .MetricsEnabled }}
+<div class="alert alert-warning">
+  Prometheus is not configured (empty <code>-prometheus-url</code>). Charts disabled.
+</div>
+{{ else }}
+
+<div class="d-flex align-items-center gap-3 mb-3">
+  <label class="form-label mb-0 small text-muted" for="rangeSel">Range</label>
+  <select id="rangeSel" class="form-select form-select-sm w-auto">
+    <option value="60" selected>Last 1h</option>
+    <option value="360">Last 6h</option>
+    <option value="1440">Last 24h</option>
+    <option value="10080">Last 7d</option>
+    <option value="43200">Last 30d</option>
+  </select>
+  <span id="loading" class="text-muted small d-none">loading…</span>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card"><div class="card-body">
+      <h2 class="h6 text-muted mb-2">CPU busy (%)</h2>
+      <canvas id="host_cpu" height="120"></canvas>
+    </div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card"><div class="card-body">
+      <h2 class="h6 text-muted mb-2">Memory used (%)</h2>
+      <canvas id="host_mem" height="120"></canvas>
+    </div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card"><div class="card-body">
+      <h2 class="h6 text-muted mb-2">Root filesystem used (%)</h2>
+      <canvas id="host_disk" height="120"></canvas>
+    </div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card"><div class="card-body">
+      <h2 class="h6 text-muted mb-2">Load average (1m)</h2>
+      <canvas id="host_load1" height="120"></canvas>
+    </div></div>
+  </div>
+  <div class="col-lg-12">
+    <div class="card"><div class="card-body">
+      <h2 class="h6 text-muted mb-2">Network throughput per NIC (bytes/sec, rx+tx)</h2>
+      <canvas id="host_net" height="80"></canvas>
+    </div></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="/static/monitoring.js"></script>
+
+{{ end }}
+{{ end }}
