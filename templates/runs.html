@@ -33,6 +33,22 @@
   </div>
 </div>
 
+{{ if .ScenarioOptions }}
+<form method="get" action="/runs" class="d-flex align-items-center gap-2 mb-3">
+  <label class="form-label small mb-0">Filter by scenario:</label>
+  <select name="scenario" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+    <option value="">All scenarios</option>
+    {{ range .ScenarioOptions }}
+      <option value="{{ . }}" {{ if eq . $.ScenarioFilter }}selected{{ end }}>{{ . }}</option>
+    {{ end }}
+  </select>
+  {{ if .ScenarioFilter }}
+    <a href="/runs" class="btn btn-sm btn-outline-secondary">Clear</a>
+  {{ end }}
+  <noscript><button class="btn btn-sm btn-primary">Apply</button></noscript>
+</form>
+{{ end }}
+
 {{ if .Runs }}
 <div class="table-responsive">
 <table class="table table-sm align-middle">
@@ -87,6 +103,6 @@
 </table>
 </div>
 {{ else }}
-<p class="text-muted">No runs yet.</p>
+<p class="text-muted">{{ if .ScenarioFilter }}No runs for scenario <code>{{ .ScenarioFilter }}</code>.{{ else }}No runs yet.{{ end }}</p>
 {{ end }}
 {{ end }}

@@ -130,6 +130,71 @@ func (s *Server) handleBotUpdate(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/bots")
 }
 
+// handleBotRenameForm renders the standalone rename page. Separate GET
+// route (not an inline collapse) so the Rename button is a plain link —
+// same bulletproof pattern as scenario rename.
+func (s *Server) handleBotRenameForm(c *gin.Context) {
+	name := sanitizeScenarioName(c.Param("name"))
+	if name == "" {
+		c.String(http.StatusBadRequest, "invalid name")
+		return
+	}
+	b, err := models.LoadBot(s.Cfg.BotsDir, name)
+	if err != nil {
+		c.String(http.StatusNotFound, "bot %q: %v", name, err)
+		return
+	}
+	s.render(c, http.StatusOK, gin.H{
+		"Title":           "Rename " + b.Name,
+		"Page":            "bots",
+		"ContentTemplate": "content_bot_rename",
+		"Bot":             b,
+	})
+}
+
+// handleBotRename renames a bot's JSON file. Historical runs and alerts
+// keep the old name as a record of what fired. Metrics tagged with
+// `started_by="bot:<old>"` stay orphaned under the old label — the
+// bot-report chart repopulates as new runs come in under the new name.
+func (s *Server) handleBotRename(c *gin.Context) {
+	oldName := sanitizeScenarioName(c.Param("name"))
+	if oldName == "" {
+		c.String(http.StatusBadRequest, "invalid name")
+		return
+	}
+	newName := sanitizeScenarioName(c.PostForm("new_name"))
+	if newName == "" {
+		c.String(http.StatusBadRequest, "new_name required (letters, digits, _ and - only)")
+		return
+	}
+	if newName == oldName {
+		c.Redirect(http.StatusSeeOther, "/bots")
+		return
+	}
+	b, err := models.LoadBot(s.Cfg.BotsDir, oldName)
+	if err != nil {
+		c.String(http.StatusNotFound, "bot %q: %v", oldName, err)
+		return
+	}
+	if existing, _ := models.LoadBot(s.Cfg.BotsDir, newName); existing != nil {
+		c.String(http.StatusConflict, "bot %q already exists", newName)
+		return
+	}
+	b.Name = newName
+	if err := models.SaveBot(s.Cfg.BotsDir, b); err != nil {
+		c.String(http.StatusInternalServerError, "save: %v", err)
+		return
+	}
+	// Delete old only after the new file is on disk — a crash in between
+	// leaves two bot files, which the operator can resolve by deleting
+	// one. Reverse order would risk losing the bot entirely.
+	if err := models.DeleteBot(s.Cfg.BotsDir, oldName); err != nil {
+		c.String(http.StatusInternalServerError, "delete old: %v", err)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/bots")
+}
+
 // handleBotToggle flips a bot's Enabled field without touching the
 // schedule. Used by the small enable/disable button in the list row.
 func (s *Server) handleBotToggle(c *gin.Context) {

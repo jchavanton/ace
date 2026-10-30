@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -29,6 +30,7 @@ type Server struct {
 	Runner   *controller.Runner
 	Firewall *controller.Firewall // nil = firewall page disabled
 	Cleanup  *controller.Cleanup  // nil = /alerts "run now" disabled
+	APILog   *APILog              // ring buffer surfaced on /api-docs
 }
 
 // Register installs the routes on r. When Cfg.BasicAuthHtpasswd is set,
@@ -36,15 +38,21 @@ type Server struct {
 // the LAN-only default).
 func (s *Server) Register(r *gin.Engine) {
 	r.Use(basicAuth(s.Cfg.BasicAuthHtpasswd))
+	if s.APILog == nil {
+		s.APILog = NewAPILog(500)
+	}
+	apiLog := apiLogMiddleware(s.APILog)
 	r.GET("/", s.handleIndex)
 	r.GET("/scenarios", s.handleScenarios)
 	r.POST("/scenarios", s.handleScenarioCreate)
 	r.GET("/scenarios/:name", s.handleScenarioDetail)
 	r.POST("/scenarios/:name", s.handleScenarioSave)
 	r.POST("/scenarios/:name/delete", s.handleScenarioDelete)
+	r.GET("/scenarios/:name/rename", s.handleScenarioRenameForm)
+	r.POST("/scenarios/:name/rename", s.handleScenarioRename)
 	r.POST("/scenarios/:name/run", s.handleRun)
-	r.POST("/api/scenarios/:name/run", s.handleAPIRun)
-	r.GET("/api/runs/:id", s.handleAPIRunStatus)
+	r.POST("/api/scenarios/:name/run", apiLog, s.handleAPIRun)
+	r.GET("/api/runs/:id", apiLog, s.handleAPIRunStatus)
 	r.POST("/runs/:id/stop", s.handleRunStop)
 	r.GET("/runs", s.handleRuns)
 	r.GET("/runs/:id", s.handleRunDetail)
@@ -57,11 +65,13 @@ func (s *Server) Register(r *gin.Engine) {
 	r.GET("/bots", s.handleBots)
 	r.POST("/bots", s.handleBotCreate)
 	r.POST("/bots/:name", s.handleBotUpdate)
+	r.GET("/bots/:name/rename", s.handleBotRenameForm)
+	r.POST("/bots/:name/rename", s.handleBotRename)
 	r.POST("/bots/:name/toggle", s.handleBotToggle)
 	r.POST("/bots/:name/delete", s.handleBotDelete)
 	r.POST("/bots/:name/run", s.handleBotRun)
 	r.GET("/bots/:name/report", s.handleBotReport)
-	r.GET("/api/metrics/range", s.handleMetricsRange)
+	r.GET("/api/metrics/range", apiLog, s.handleMetricsRange)
 	r.POST("/alerts/:id/ack", s.handleAlertAck)
 	r.GET("/alerts", s.handleAlerts)
 	r.POST("/alerts/config", s.handleAlertConfigSave)
@@ -70,6 +80,20 @@ func (s *Server) Register(r *gin.Engine) {
 	r.POST("/alerts/clear/:name", s.handleAlertClear)
 	r.POST("/runs/retention", s.handleRunsRetentionSave)
 	r.POST("/runs/cleanup", s.handleRunsCleanupNow)
+	r.GET("/api-docs", s.handleAPIDocs)
+}
+
+func (s *Server) handleAPIDocs(c *gin.Context) {
+	var entries []APILogEntry
+	if s.APILog != nil {
+		entries = s.APILog.Snapshot()
+	}
+	s.render(c, http.StatusOK, gin.H{
+		"Title":           "API",
+		"Page":            "api-docs",
+		"ContentTemplate": "content_api_docs",
+		"APILogEntries":   entries,
+	})
 }
 
 func (s *Server) handleIndex(c *gin.Context) {
@@ -326,6 +350,30 @@ func (s *Server) handleRuns(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "list runs: %v", err)
 		return
 	}
+	// Scenario filter dropdown is populated from the names actually
+	// present in the runs list — not /scenarios — so renamed/deleted
+	// scenarios still show up as long as a historical run references
+	// them. Build the set before filtering so the dropdown stays stable
+	// as the user picks different values.
+	scenarioSet := map[string]struct{}{}
+	for _, r := range runs {
+		scenarioSet[r.Scenario] = struct{}{}
+	}
+	scenarioOptions := make([]string, 0, len(scenarioSet))
+	for name := range scenarioSet {
+		scenarioOptions = append(scenarioOptions, name)
+	}
+	sort.Strings(scenarioOptions)
+	filter := c.Query("scenario")
+	if filter != "" {
+		filtered := runs[:0]
+		for _, r := range runs {
+			if r.Scenario == filter {
+				filtered = append(filtered, r)
+			}
+		}
+		runs = filtered
+	}
 	// Cleanup card data — same fields the alerts page uses for its
 	// half of the retention story. Config is best-effort; a broken
 	// alert_config.json shouldn't blank the run list.
@@ -343,6 +391,8 @@ func (s *Server) handleRuns(c *gin.Context) {
 		"Page":                   "runs",
 		"ContentTemplate":        "content_runs",
 		"Runs":                   runs,
+		"ScenarioOptions":        scenarioOptions,
+		"ScenarioFilter":         filter,
 		"Config":                 cfg,
 		"RunsRetentionEffective": runsDaysEffective,
 		"CleanupMessage":         c.Query("cleanup"),
@@ -688,6 +738,98 @@ func (s *Server) handleScenarioDelete(c *gin.Context) {
 	// there, the scenario delete still succeeds.
 	_ = models.DeleteScenarioPorts(s.Cfg.ScenariosDir, name)
 	c.Redirect(http.StatusSeeOther, "/scenarios")
+}
+
+// handleScenarioRenameForm renders the standalone rename page. Kept as
+// its own GET so the Rename button is a plain link — no JS/collapse to
+// break on LAN deployments where CDN assets may be slow or blocked.
+func (s *Server) handleScenarioRenameForm(c *gin.Context) {
+	name := sanitizeScenarioName(c.Param("name"))
+	if name == "" {
+		c.String(http.StatusBadRequest, "invalid name")
+		return
+	}
+	scn, err := models.LoadScenario(s.Cfg.ScenariosDir, name)
+	if err != nil {
+		c.String(http.StatusNotFound, "scenario %q: %v", name, err)
+		return
+	}
+	if s.Runner.IsScenarioRunning(name) {
+		c.String(http.StatusConflict, "scenario %q is currently running; stop the run first", name)
+		return
+	}
+	s.render(c, http.StatusOK, gin.H{
+		"Title":           "Rename " + scn.Name,
+		"Page":            "scenarios",
+		"ContentTemplate": "content_scenario_rename",
+		"Scenario":        scn,
+	})
+}
+
+// handleScenarioRename renames a scenario's XML file and its sidecars,
+// then fixes up any bots that referenced the old name. Refuses if the
+// scenario is currently running (voip_patrol may still be reading the
+// file) or if the destination name already exists. Historical runs
+// keep the old scenario name — they are a record of what happened.
+func (s *Server) handleScenarioRename(c *gin.Context) {
+	oldName := sanitizeScenarioName(c.Param("name"))
+	if oldName == "" {
+		c.String(http.StatusBadRequest, "invalid name")
+		return
+	}
+	newName := sanitizeScenarioName(c.PostForm("new_name"))
+	if newName == "" {
+		c.String(http.StatusBadRequest, "new_name required (letters, digits, _ and - only)")
+		return
+	}
+	if newName == oldName {
+		c.Redirect(http.StatusSeeOther, "/scenarios/"+oldName)
+		return
+	}
+	if s.Runner.IsScenarioRunning(oldName) {
+		c.String(http.StatusConflict, "scenario %q is currently running; stop the run first", oldName)
+		return
+	}
+	oldPath := filepath.Join(s.Cfg.ScenariosDir, oldName+".xml")
+	if _, err := os.Stat(oldPath); err != nil {
+		c.String(http.StatusNotFound, "scenario %q does not exist", oldName)
+		return
+	}
+	newPath := filepath.Join(s.Cfg.ScenariosDir, newName+".xml")
+	if _, err := os.Stat(newPath); err == nil {
+		c.String(http.StatusConflict, "scenario %q already exists", newName)
+		return
+	}
+	if err := os.Rename(oldPath, newPath); err != nil {
+		c.String(http.StatusInternalServerError, "rename xml: %v", err)
+		return
+	}
+	// Sidecars: best-effort. os.Rename returns ENOENT when the source
+	// is absent (no sidecar for this scenario) — that's fine, nothing
+	// to move. Any other error gets logged but doesn't roll back the
+	// XML rename: the operator can save sidecars again from the UI.
+	for _, suffix := range []string{".ports.json", ".verdict.json"} {
+		src := filepath.Join(s.Cfg.ScenariosDir, oldName+suffix)
+		dst := filepath.Join(s.Cfg.ScenariosDir, newName+suffix)
+		if _, err := os.Stat(src); err != nil {
+			continue
+		}
+		_ = os.Rename(src, dst)
+	}
+	// Rewrite every bot whose Scenario field matches the old name. A
+	// bot pointing at a renamed scenario would otherwise fail on its
+	// next tick with "scenario not found".
+	bots, err := models.ListBots(s.Cfg.BotsDir)
+	if err == nil {
+		for i := range bots {
+			if bots[i].Scenario != oldName {
+				continue
+			}
+			bots[i].Scenario = newName
+			_ = models.SaveBot(s.Cfg.BotsDir, &bots[i])
+		}
+	}
+	c.Redirect(http.StatusSeeOther, "/scenarios/"+newName)
 }
 
 // handleRunStop asks the runner to kill the currently-executing

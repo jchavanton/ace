@@ -1,0 +1,30 @@
+{{ define "content_scenario_rename" }}
+<nav aria-label="breadcrumb"><ol class="breadcrumb small">
+  <li class="breadcrumb-item"><a href="/scenarios">Scenarios</a></li>
+  <li class="breadcrumb-item"><a href="/scenarios/{{ .Scenario.Name }}">{{ .Scenario.Name }}</a></li>
+  <li class="breadcrumb-item active">rename</li>
+</ol></nav>
+
+<h1 class="h3 mb-3">Rename scenario</h1>
+
+<form method="post" action="/scenarios/{{ .Scenario.Name }}/rename" class="col-md-6">
+  <div class="mb-3">
+    <label class="form-label small">Current name</label>
+    <input class="form-control form-control-sm font-monospace" value="{{ .Scenario.Name }}" disabled>
+  </div>
+  <div class="mb-3">
+    <label class="form-label small">New name</label>
+    <input name="new_name" required pattern="[A-Za-z0-9_-]+" maxlength="64"
+           value="{{ .Scenario.Name }}"
+           class="form-control form-control-sm font-monospace" autofocus>
+    <div class="form-text small">Letters, digits, <code>_</code> and <code>-</code> only.</div>
+  </div>
+  <p class="small text-muted">
+    Renames the XML and its sidecars. Bots pointing at <code>{{ .Scenario.Name }}</code> get updated automatically. Historical runs keep the old name.
+  </p>
+  <div class="d-flex gap-2">
+    <button class="btn btn-sm btn-primary">Rename</button>
+    <a href="/scenarios/{{ .Scenario.Name }}" class="btn btn-sm btn-outline-secondary">Cancel</a>
+  </div>
+</form>
+{{ end }}

@@ -96,6 +96,48 @@ func (c CallResult) EnergyStats() RTPStats {
 	return c.RTPStats[len(c.RTPStats)-1]
 }
 
+// ClassifyFailure returns a human-readable reason for a FAIL call based
+// on the fields voip_patrol wrote. Non-empty return = append this to
+// the call's Reason. Returns "" for calls that aren't FAIL or that
+// already carry an explicit reason — the caller only invokes this when
+// the existing Reason is uninformative ("" or "OK").
+//
+// Covers the common voip_patrol FAIL modes:
+//   - SIP cause code mismatch (e.g. 486 Busy, 408 Timeout vs expected 200)
+//   - Call ran past its max_duration budget
+//   - hangup set beyond max_duration (scenario misconfig; preempts #2)
+//   - Call reached cause 200 but produced no RTP (SDP/NAT/firewall)
+//
+// Not covered: everything voip_patrol decides internally (e.g. tone
+// detection timeout) — we fall back to a generic string.
+func (c CallResult) ClassifyFailure() string {
+	if c.Result != "FAIL" {
+		return ""
+	}
+	if c.Action != "call" && c.Action != "accept" {
+		return ""
+	}
+	// Order matters: hangup>max is a scenario bug that *causes*
+	// duration>max, so flag it first with the clearer phrasing.
+	if c.MaxDuration > 0 && c.HangupDuration > c.MaxDuration {
+		return fmt.Sprintf("scenario misconfigured: hangup=%ds set beyond max_duration=%ds — call runs past its budget",
+			c.HangupDuration, c.MaxDuration)
+	}
+	if c.MaxDuration > 0 && c.Duration > c.MaxDuration {
+		return fmt.Sprintf("call ran %ds, exceeded max_duration=%ds", c.Duration, c.MaxDuration)
+	}
+	if c.ExpectedCauseCode > 0 && c.CauseCode != 0 && c.CauseCode != c.ExpectedCauseCode {
+		return fmt.Sprintf("SIP %d %s (expected %d)", c.CauseCode, c.Reason, c.ExpectedCauseCode)
+	}
+	// A 200 with no RTP = session established but media never flowed.
+	// Only flag this when the scenario expected the call to connect;
+	// an "expect 486" scenario legitimately has no RTP.
+	if c.ExpectedCauseCode == 200 && c.CauseCode == 200 && len(c.RTPStats) == 0 {
+		return "no RTP media established despite SIP 200"
+	}
+	return "voip_patrol marked FAIL (no further detail)"
+}
+
 // RTPStats mirrors one entry of voip_patrol's "rtp_stats" array.
 type RTPStats struct {
 	RTT             int          `json:"rtt"`

@@ -13,7 +13,14 @@
 <form method="post" action="/scenarios/{{ .Scenario.Name }}" id="scenario-form">
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h1 class="h3 mb-0">{{ .Scenario.Name }}</h1>
+  <div class="d-flex align-items-center gap-2">
+    <h1 class="h3 mb-0">{{ .Scenario.Name }}</h1>
+    {{ if .ScenarioRunning }}
+    <span class="btn btn-xs btn-outline-secondary disabled" title="scenario is running">Rename</span>
+    {{ else }}
+    <a href="/scenarios/{{ .Scenario.Name }}/rename" class="btn btn-xs btn-outline-secondary">Rename</a>
+    {{ end }}
+  </div>
   <div class="row row-cols-lg-auto g-2 align-items-center d-inline-flex">
     <div class="col-auto">
       <!-- Hidden marker so the server can distinguish "this form has

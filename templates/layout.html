@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ .Title }} — ace</title>
 <link rel="icon" type="image/png" href="/static/logo.png">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="/static/bootstrap.min.css" rel="stylesheet">
 <link href="/static/style.css" rel="stylesheet">
 </head>
 <body>
@@ -32,6 +32,7 @@
         </a>
       </li>
       <li class="nav-item"><a class="nav-link {{ if eq .Page "firewall" }}active{{ end }}" href="/firewall">Firewall</a></li>
+      <li class="nav-item"><a class="nav-link {{ if eq .Page "api-docs" }}active{{ end }}" href="/api-docs">API</a></li>
     </ul>
     {{ if .Busy }}<span class="badge bg-warning text-dark">run in progress</span>{{ end }}
   </div>
@@ -45,8 +46,12 @@
 {{- else if eq .ContentTemplate "content_bots" -}}         {{ template "content_bots" . }}
 {{- else if eq .ContentTemplate "content_bot_report" -}}   {{ template "content_bot_report" . }}
 {{- else if eq .ContentTemplate "content_alerts" -}}       {{ template "content_alerts" . }}
+{{- else if eq .ContentTemplate "content_api_docs" -}}     {{ template "content_api_docs" . }}
+{{- else if eq .ContentTemplate "content_scenario_rename" -}} {{ template "content_scenario_rename" . }}
+{{- else if eq .ContentTemplate "content_bot_rename" -}}   {{ template "content_bot_rename" . }}
 {{- end -}}
 </main>
+<script src="/static/bootstrap.bundle.min.js"></script>
 </body>
 </html>
 {{ end }}

@@ -108,5 +108,29 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
 
+  # node_exporter publishes host-level CPU/memory/disk/network metrics
+  # that the /monitoring page queries via Prometheus. Bound to localhost
+  # only (host networking) so the raw endpoint isn't exposed off-host —
+  # ace is the only consumer, through the sidecar prometheus.
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: ace-node-exporter
+    network_mode: host
+    restart: unless-stopped
+    pid: host
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/host/root'
+      - '--web.listen-address=127.0.0.1:9100'
+      - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|run/docker/.+)($$|/)'
+      - '--collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$$'
+    volumes:
+      - '/proc:/host/proc:ro'
+      - '/sys:/host/sys:ro'
+      - '/:/host/root:ro,rslave'
+    mem_limit: 100M
+    mem_reservation: 20M
+
 volumes:
   prometheus_data:

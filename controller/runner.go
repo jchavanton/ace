@@ -296,6 +296,9 @@ func (r *Runner) RecoverOrphanedRuns() (int, error) {
 		run.Error = "orphaned by controller restart"
 		run.FinishedAt = now
 		if calls, _ := loadVoipPatrolResults(filepath.Join(run.Dir(r.Cfg.RunsDir), "results.json")); len(calls) > 0 {
+			for i := range calls {
+				explainFailure(&calls[i])
+			}
 			if verdict, _ := models.LoadScenarioVerdict(r.Cfg.ScenariosDir, run.Scenario); !verdict.IsZero() {
 				for i := range calls {
 					if ok, extra := verdict.Apply(&calls[i]); !ok {
@@ -621,6 +624,14 @@ func (r *Runner) execute(ctx context.Context, cancel context.CancelFunc, run *mo
 	// per-call results as they complete, so a crash mid-run still
 	// leaves partial data we want to surface.
 	calls, parseErr := loadVoipPatrolResults(filepath.Join(run.Dir(r.Cfg.RunsDir), "results.json"))
+	// Classify voip_patrol FAILs into human-readable reasons before the
+	// verdict runs. voip_patrol often writes "reason": "OK" even on a
+	// FAIL (e.g. duration-over-budget), so without this step the run
+	// detail page has nothing to show. The verdict's reason-suffix is
+	// appended below if that check also fails.
+	for i := range calls {
+		explainFailure(&calls[i])
+	}
 	// Scenario-level verdict (voice-frames thresholds etc.) runs
 	// *before* aggregate so the pass/fail counts reflect the final
 	// verdict, not voip_patrol's intermediate one. Load failure is
@@ -777,6 +788,26 @@ func aggregate(calls []models.CallResult) models.Aggregate {
 		agg.LevelPeakTx = levelPeakTx
 	}
 	return agg
+}
+
+// explainFailure fills in a human-readable reason for a FAIL call whose
+// current Reason is uninformative. voip_patrol tends to write
+// "reason": "OK" even on failures (e.g. duration-over-budget), which
+// hides the actual cause from the run-detail page. Delegates the
+// classification logic to models.CallResult.ClassifyFailure.
+func explainFailure(call *models.CallResult) {
+	if call.Result != "FAIL" {
+		return
+	}
+	existing := strings.TrimSpace(call.Reason)
+	// voip_patrol commonly writes "OK" for cause=200 even when the call
+	// ultimately fails — same signal as empty for our purposes.
+	if existing != "" && !strings.EqualFold(existing, "OK") {
+		return
+	}
+	if explained := call.ClassifyFailure(); explained != "" {
+		call.Reason = explained
+	}
 }
 
 // percentile returns the p-th percentile of xs using the nearest-rank

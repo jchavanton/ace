@@ -1,0 +1,193 @@
+{{ define "content_api_docs" }}
+<h1 class="h3 mb-3">API</h1>
+
+<ul class="nav nav-tabs mb-3" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-docs" type="button" role="tab">Documentation</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-log" type="button" role="tab">
+      Log
+      {{ if .APILogEntries }}<span class="badge bg-secondary ms-1">{{ len .APILogEntries }}</span>{{ end }}
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content">
+
+<div class="tab-pane fade show active" id="tab-docs" role="tabpanel">
+<p class="text-muted">
+  Machine-callable JSON endpoints for driving ace from scripts and CI.
+  All endpoints share the same HTTP Basic auth as the web UI when
+  <code>-basic-auth-htpasswd</code> is set.
+</p>
+
+<div class="card mb-4">
+  <div class="card-header">
+    <span class="badge bg-success">POST</span>
+    <code>/api/scenarios/:name/run</code>
+  </div>
+  <div class="card-body">
+    <p class="mb-2">Start a scenario run. Returns <code>202 Accepted</code> immediately; poll <code>/api/runs/:id</code> for the outcome.</p>
+
+    <h6 class="mt-3">Form parameters (all optional)</h6>
+    <table class="table table-sm">
+      <thead><tr><th>Name</th><th>Type</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>sip_port</code></td><td>int</td><td>Override SIP port (1024-65535). Empty = scenario sidecar → config default.</td></tr>
+        <tr><td><code>rtp_start</code></td><td>int</td><td>RTP port range start.</td></tr>
+        <tr><td><code>rtp_end</code></td><td>int</td><td>RTP port range end. Must be &ge; <code>rtp_start</code>.</td></tr>
+        <tr><td><code>auto_ports</code></td><td>bool</td><td>Set to <code>1</code> to let ace pick free SIP/RTP ports. Discards the three fields above.</td></tr>
+        <tr><td><code>public_address</code></td><td>string</td><td>IP advertised in SIP Contact/Via.</td></tr>
+        <tr><td><code>timeout_seconds</code></td><td>int</td><td>Hard cap on run duration. <code>0</code> = unlimited.</td></tr>
+        <tr><td><code>transport</code></td><td>enum</td><td><code>udp</code>, <code>tcp</code>, or <code>tls</code>. Empty = scenario default.</td></tr>
+        <tr><td><code>nameservers</code></td><td>string</td><td>Comma-separated DNS resolver list.</td></tr>
+      </tbody>
+    </table>
+
+    <h6 class="mt-3">Response <code>202</code></h6>
+<pre class="bg-light p-2 small mb-2"><code>{
+  "id": "20261026-153740-aizan_test_option4",
+  "url": "/runs/20261026-153740-aizan_test_option4"
+}</code></pre>
+
+    <h6>Errors</h6>
+    <ul class="small mb-2">
+      <li><code>404</code> — scenario not found</li>
+      <li><code>400</code> — invalid port/IP/timeout/transport input</li>
+      <li><code>409</code> — runner refused (overlapping ports, concurrency limit)</li>
+    </ul>
+
+    <h6>Example</h6>
+<pre class="bg-light p-2 small mb-0"><code>curl -u user:pass -X POST \
+  -d 'auto_ports=1' \
+  http://host:8086/api/scenarios/aizan_test_option4/run</code></pre>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header">
+    <span class="badge bg-primary">GET</span>
+    <code>/api/runs/:id</code>
+  </div>
+  <div class="card-body">
+    <p class="mb-2">Poll a run's status. <code>passed</code> is <code>null</code> while running; <code>true</code>/<code>false</code> once complete.</p>
+
+    <h6 class="mt-3">Response <code>200</code></h6>
+<pre class="bg-light p-2 small mb-2"><code>{
+  "passed": true,
+  "run": {
+    "id": "20261026-153740-aizan_test_option4",
+    "scenario": "aizan_test_option4",
+    "status": "passed",
+    "started_at": "2026-10-26T15:37:40Z",
+    "ended_at":   "2026-10-26T15:38:12Z",
+    "started_by": "julien",
+    ...
+  }
+}</code></pre>
+
+    <h6>Errors</h6>
+    <ul class="small mb-2"><li><code>404</code> — run id unknown</li></ul>
+
+    <h6>Example (poll until done)</h6>
+<pre class="bg-light p-2 small mb-0"><code>while :; do
+  r=$(curl -s -u user:pass http://host:8086/api/runs/$ID)
+  echo "$r" | jq -e '.passed != null' &gt;/dev/null &amp;&amp; break
+  sleep 2
+done
+echo "$r" | jq .passed</code></pre>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header">
+    <span class="badge bg-primary">GET</span>
+    <code>/api/metrics/range</code>
+  </div>
+  <div class="card-body">
+    <p class="mb-2">Proxy to Prometheus <code>query_range</code> for the bot-report charts. Server-side selects the PromQL based on the <code>panel</code> name — clients do not pass raw queries.</p>
+
+    <h6 class="mt-3">Query parameters</h6>
+    <table class="table table-sm">
+      <thead><tr><th>Name</th><th>Required</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>panel</code></td><td>yes</td><td>Panel name (see <a href="/bots">/bots</a> report page for the catalog).</td></tr>
+        <tr><td><code>started_by</code></td><td>yes</td><td>Bot name — matches the <code>started_by</code> label voip_patrol emits.</td></tr>
+        <tr><td><code>start</code></td><td>yes</td><td>RFC3339 or Unix seconds.</td></tr>
+        <tr><td><code>end</code></td><td>yes</td><td>RFC3339 or Unix seconds.</td></tr>
+        <tr><td><code>step</code></td><td>yes</td><td>Prometheus duration (e.g. <code>30s</code>, <code>5m</code>).</td></tr>
+      </tbody>
+    </table>
+
+    <h6>Response</h6>
+    <p class="small mb-2">Verbatim Prometheus <code>query_range</code> payload (<code>status</code>, <code>data.result</code>, …).</p>
+
+    <h6>Errors</h6>
+    <ul class="small mb-2">
+      <li><code>400</code> — missing/invalid param or unknown panel</li>
+      <li><code>502</code> — Prometheus unreachable</li>
+    </ul>
+
+    <h6>Example</h6>
+<pre class="bg-light p-2 small mb-0"><code>curl -u user:pass \
+  'http://host:8086/api/metrics/range?panel=call_success_rate&amp;started_by=my-bot&amp;start=2026-10-26T00:00:00Z&amp;end=2026-10-26T01:00:00Z&amp;step=30s'</code></pre>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header">Authentication</div>
+  <div class="card-body">
+    <p class="mb-1">When basic auth is enabled, every <code>/api/*</code> request requires an <code>Authorization: Basic …</code> header. Users are managed in the ansible inventory (<code>ace_basic_auth_users</code>), stored bcrypt-hashed in <code>htpasswd</code>, and reloaded every 10s so a playbook re-run adds a user with no restart.</p>
+  </div>
+</div>
+</div><!-- /tab-docs -->
+
+<div class="tab-pane fade" id="tab-log" role="tabpanel">
+  <p class="text-muted small">
+    Last {{ len .APILogEntries }} <code>/api/*</code> requests, newest first.
+    In-memory ring buffer (capacity 500) — cleared on restart.
+  </p>
+  {{ if .APILogEntries }}
+  <div class="table-responsive">
+    <table class="table table-sm table-striped small mb-0">
+      <thead>
+        <tr>
+          <th>Time (UTC)</th>
+          <th>Method</th>
+          <th>Path</th>
+          <th>Status</th>
+          <th>Duration</th>
+          <th>User</th>
+          <th>Client IP</th>
+          <th>Error</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{ range .APILogEntries }}
+        <tr>
+          <td class="text-nowrap"><code>{{ .Time.UTC.Format "2006-01-02 15:04:05" }}</code></td>
+          <td>{{ .Method }}</td>
+          <td class="text-break"><code>{{ .Path }}</code></td>
+          <td>
+            {{ if ge .Status 500 }}<span class="badge bg-danger">{{ .Status }}</span>
+            {{ else if ge .Status 400 }}<span class="badge bg-warning text-dark">{{ .Status }}</span>
+            {{ else if ge .Status 300 }}<span class="badge bg-info text-dark">{{ .Status }}</span>
+            {{ else }}<span class="badge bg-success">{{ .Status }}</span>{{ end }}
+          </td>
+          <td class="text-nowrap">{{ .DurationMs }} ms</td>
+          <td>{{ .User }}</td>
+          <td class="text-nowrap">{{ .ClientIP }}</td>
+          <td class="text-danger small">{{ .Error }}</td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  </div>
+  {{ else }}
+  <p class="text-muted">No requests logged yet.</p>
+  {{ end }}
+</div><!-- /tab-log -->
+
+</div><!-- /tab-content -->
+{{ end }}
