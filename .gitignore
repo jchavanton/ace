@@ -6,6 +6,13 @@
 /runs/*
 !/runs/.keep
 
+# Runtime bot state (alert_config.json, per-bot JSON) — written by the
+# controller, not source.
+/bots/
+
+# Local bridge binary / stray artifact at repo root.
+/bridge
+
 # Local-only overrides
 /config.local.yml
 
