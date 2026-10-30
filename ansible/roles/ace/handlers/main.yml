@@ -5,3 +5,16 @@
   ansible.builtin.command:
     cmd: docker compose up -d
     chdir: "{{ ace_install_dir }}"
+
+# Prometheus reads prometheus.yml at startup only — no SIGHUP / reload
+# in the default image config (lifecycle API disabled). A config-only
+# change rsync'd in by the "Ship ace source" step won't take effect
+# until the container restarts. compose doesn't track bind-mounted
+# file changes as a reason to recreate, so we restart it explicitly
+# when the file content changes.
+- name: restart prometheus
+  become: true
+  ansible.builtin.command:
+    cmd: docker restart ace-prometheus
+  # Changed-when inherits from command (always changed when run); fine
+  # for a handler — it only runs on notify.

@@ -123,11 +123,34 @@
       - "--exclude=.git"
       - "--exclude=ace"           # built binary; the image rebuild does its own
       - "--exclude=ansible"       # don't ship the playbook into the build context
+      # prometheus/prometheus.yml is owned by the dedicated copy task
+      # below so its `changed` signal is content-exact and can notify
+      # a prometheus-only restart. Rsync shipping it here would flip
+      # perms back to the source's (1000:0664) and the next copy task
+      # would re-correct them, spuriously firing the handler.
+      - "--exclude=prometheus/prometheus.yml"
       # Container writes root-owned files into bind-mounted dirs
       # (firewall/, runs/, scenarios/). --archive would try to utime()
       # those dirs and fail as the non-root SSH user; skip dir times.
       - "--omit-dir-times"
     times: true
+
+# Prometheus config: rsync above already shipped the file, but
+# `synchronize` reports changed for *any* file in the tree, which
+# would restart prometheus on every deploy. Re-copy just prometheus.yml
+# via the `copy` module so the `changed` signal is content-exact; the
+# notify fires only when the YAML actually differs. Prometheus reads
+# its config on startup only (no SIGHUP in the default image), so this
+# notify is what makes a scrape-config change take effect.
+- name: Install prometheus config (notify-on-change)
+  become: true
+  ansible.builtin.copy:
+    src: "{{ ace_source_dir }}/prometheus/prometheus.yml"
+    dest: "{{ ace_install_dir }}/prometheus/prometheus.yml"
+    owner: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
+    group: "{{ 'root' if ace_cloud | default('') != 'gcp' else ansible_user }}"
+    mode: '0644'
+  notify: restart prometheus
 
 # Only ship voip_patrol source when the target is going to build it —
 # GCP uses the prebuilt jchavanton/voip_patrol image (Dockerfile stage 1
