@@ -123,4 +123,7 @@ CMD ["/bin/sh", "-c", "exec /usr/local/bin/ace \
     ${ACE_TLS_CERT:+-tls-cert ${ACE_TLS_CERT}} \
     ${ACE_TLS_PRIVKEY:+-tls-privkey ${ACE_TLS_PRIVKEY}} \
     ${ACE_TLS_CALIST:+-tls-calist ${ACE_TLS_CALIST}} \
-    ${ACE_PROMETHEUS_URL:+-prometheus-url ${ACE_PROMETHEUS_URL}}"]
+    ${ACE_PROMETHEUS_URL:+-prometheus-url ${ACE_PROMETHEUS_URL}} \
+    ${ACE_WEBHOOK_URL:+-webhook-url ${ACE_WEBHOOK_URL}} \
+    ${ACE_WEBHOOK_SECRET:+-webhook-secret ${ACE_WEBHOOK_SECRET}} \
+    ${ACE_WEBHOOK_TIMEOUT:+-webhook-timeout ${ACE_WEBHOOK_TIMEOUT}}"]

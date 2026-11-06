@@ -138,6 +138,27 @@ type Config struct {
 	// "http://localhost:9090" (prometheus runs on host networking on
 	// the same host as ace).
 	PrometheusURL string
+
+	// WebhookURL, when non-empty, is POSTed JSON events for each per-call
+	// result and once per run finish. Fire-and-forget: errors are logged
+	// but never block or fail a run. Payload shapes are documented on
+	// controller/webhook.go. Intended for bridge processes that translate
+	// ACE events into other transports (RabbitMQ, Kafka, ...). Empty =
+	// webhooks disabled (default); nothing is posted.
+	WebhookURL string
+
+	// WebhookTimeout caps a single POST attempt. Short by design — the
+	// webhook is best-effort, and a slow consumer must not stall the
+	// run-finish code path or back up the per-call tailer. 0 falls back
+	// to a built-in default (5s).
+	WebhookTimeout time.Duration
+
+	// WebhookSecret, when non-empty, is used as the HMAC-SHA256 key over
+	// the request body; the digest is sent in the X-Ace-Signature header
+	// ("sha256=<hex>") so the receiver can authenticate the payload.
+	// Empty = no signature header. Not a secret-management best practice
+	// (CLI-flag only); fine for the LAN deploys this project targets.
+	WebhookSecret string
 }
 
 // FromFlags parses flags and validates the result. Exits with a clear
@@ -167,6 +188,9 @@ func FromFlags() *Config {
 	flag.StringVar(&c.TLSPrivKey, "tls-privkey", "", "TLS private key file (pem) passed to voip_patrol --tls-privkey")
 	flag.StringVar(&c.TLSCAList, "tls-calist", "", "TLS CA list (pem) passed to voip_patrol --tls-calist; optional")
 	flag.StringVar(&c.PrometheusURL, "prometheus-url", "", "base URL of prometheus (e.g. http://localhost:9090) used by /bots/:name/report; empty disables the chart panels")
+	flag.StringVar(&c.WebhookURL, "webhook-url", "", "POST per-call and run-finish events here as JSON; empty disables webhooks")
+	flag.DurationVar(&c.WebhookTimeout, "webhook-timeout", 5*time.Second, "per-POST timeout for the webhook (fire-and-forget; failures are logged, never retried)")
+	flag.StringVar(&c.WebhookSecret, "webhook-secret", "", "HMAC-SHA256 key for the X-Ace-Signature header on webhook posts; empty = no signature")
 	flag.Parse()
 
 	// Resolve to absolute paths so the gin handlers don't need to care

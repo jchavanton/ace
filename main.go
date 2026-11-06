@@ -50,6 +50,15 @@ func main() {
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	runner := &controller.Runner{Cfg: cfg}
+	// Webhook poster is opt-in via -webhook-url. NewWebhookPoster returns
+	// nil when the URL is empty; the hooks below are also nil-safe, so
+	// skipping the registration isn't necessary — but we do it anyway to
+	// keep the "nothing posted" case out of the per-call hot path.
+	if poster := controller.NewWebhookPoster(cfg.WebhookURL, cfg.WebhookSecret, cfg.WebhookTimeout); poster != nil {
+		runner.AddOnCall(poster.PostCall)
+		runner.AddOnFinish(poster.PostRunFinished)
+		log.Printf("ace: webhook enabled → %s", cfg.WebhookURL)
+	}
 	srv := &handlers.Server{
 		Cfg:    cfg,
 		Runner: runner,

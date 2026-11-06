@@ -75,6 +75,16 @@ services:
       # /bots/:name/report chart panels — /metrics itself still exports,
       # so a downstream prometheus can scrape ace even without this set.
       ACE_PROMETHEUS_URL: "${ACE_PROMETHEUS_URL:-http://localhost:9090}"
+      # Webhook destination for per-call and run.finished events.
+      # Typical value with host networking: http://127.0.0.1:8090/webhook
+      # (the ace_bridge process listens on the host). Empty disables webhooks.
+      ACE_WEBHOOK_URL: "${ACE_WEBHOOK_URL:-}"
+      # Optional HMAC-SHA256 secret for X-Ace-Signature on outbound
+      # webhook POSTs. Must match the bridge's -webhook-secret. Empty
+      # = no signature header.
+      ACE_WEBHOOK_SECRET: "${ACE_WEBHOOK_SECRET:-}"
+      # Optional per-POST timeout, e.g. "5s". Empty defaults to 5s.
+      ACE_WEBHOOK_TIMEOUT: "${ACE_WEBHOOK_TIMEOUT:-}"
     volumes:
       - ./scenarios:/data/scenarios:rw
       - ./runs:/data/runs:rw

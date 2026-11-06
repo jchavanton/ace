@@ -69,6 +69,12 @@ type CallResult struct {
 	ExpectedCauseCode int        `json:"expected_cause_code"`
 	CauseCode         int        `json:"cause_code"`
 	Reason            string     `json:"reason"`
+	// ToneDetected is 1 when voip_patrol's tone detector fired during
+	// the call (early media + detect_tone="true"). Zero otherwise; omitted
+	// from JSON when zero so standard (non-n2t) calls stay unchanged on
+	// the wire. The downstream bridge uses this to classify n2t probes.
+	ToneDetected      int        `json:"tone_detected,omitempty"`
+	ToneDetectedMs    int        `json:"tone_detected_ms,omitempty"`
 	CallID            string     `json:"callid"`
 	Transport         string     `json:"transport"`
 	PeerSocket        string     `json:"peer_socket"`

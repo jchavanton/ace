@@ -45,6 +45,14 @@ type Runner struct {
 	// this hook is best-effort observability.
 	onFinishMu sync.Mutex
 	onFinish   []func(*models.Run)
+
+	// onCall holds callbacks invoked once per line as voip_patrol appends
+	// to results.json, while the run is still in flight. Used by the
+	// webhook poster to stream per-call events to the bridge. Same
+	// best-effort semantics as onFinish: errors swallowed, order of
+	// invocation matches registration order, no backpressure.
+	onCallMu sync.Mutex
+	onCall   []func(*models.Run, models.CallResult)
 }
 
 // AddOnFinish registers a callback invoked once per completed run,
@@ -54,6 +62,16 @@ func (r *Runner) AddOnFinish(fn func(*models.Run)) {
 	r.onFinishMu.Lock()
 	defer r.onFinishMu.Unlock()
 	r.onFinish = append(r.onFinish, fn)
+}
+
+// AddOnCall registers a callback invoked once per per-call result as
+// voip_patrol appends a line to results.json. Fires while the run is
+// still in flight; the final onFinish still carries the complete Run.
+// Thread-safe.
+func (r *Runner) AddOnCall(fn func(*models.Run, models.CallResult)) {
+	r.onCallMu.Lock()
+	defer r.onCallMu.Unlock()
+	r.onCall = append(r.onCall, fn)
 }
 
 // activeRun is the in-memory record of a currently-executing run.
@@ -607,7 +625,27 @@ func (r *Runner) execute(ctx context.Context, cancel context.CancelFunc, run *mo
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 
+	// Start a tailer only if someone's listening. The tailer reads newly
+	// decoded CallResults from results.json while voip_patrol runs and
+	// fires onCall per line. It stops when tailStop is closed, which we
+	// do after cmd.Run returns — the trailing read sweeps up any lines
+	// written between the last poll and process exit.
+	r.onCallMu.Lock()
+	hasOnCall := len(r.onCall) > 0
+	r.onCallMu.Unlock()
+	var tailStop chan struct{}
+	var tailDone chan struct{}
+	if hasOnCall {
+		tailStop = make(chan struct{})
+		tailDone = make(chan struct{})
+		go r.tailResults(run, filepath.Join(runDir, "results.json"), tailStop, tailDone)
+	}
+
 	runErr := cmd.Run()
+	if hasOnCall {
+		close(tailStop)
+		<-tailDone
+	}
 	run.FinishedAt = time.Now().UTC()
 	if cmd.ProcessState != nil {
 		run.ExitCode = cmd.ProcessState.ExitCode()
@@ -683,6 +721,85 @@ func (r *Runner) execute(ctx context.Context, cancel context.CancelFunc, run *mo
 	r.onFinishMu.Unlock()
 	for _, fn := range hooks {
 		fn(run)
+	}
+}
+
+// tailResults streams newly-appended rows from results.json while
+// voip_patrol runs, firing onCall per newly-seen row.
+//
+// Implementation: each poll re-reads the whole file and decodes every
+// complete JSON object. Rows already fired (keyed by CallID) are
+// skipped so a callback runs exactly once per call. voip_patrol
+// opens results.json at startup (as an empty file) and writes rows
+// synchronously as calls complete — a single long-lived json.Decoder
+// bound to that empty file never recovers after its internal
+// bufio.Reader caches the first EOF, so we deliberately avoid that
+// pattern here.
+//
+// Shutdown: close stop. The tailer performs one final scan (to catch
+// anything written between the last tick and process exit), then
+// closes done so the caller can wait. All callback errors are
+// swallowed; a slow callback can only delay subsequent events on
+// this one run, not block the main run completion path.
+func (r *Runner) tailResults(run *models.Run, path string, stop <-chan struct{}, done chan<- struct{}) {
+	defer close(done)
+	const pollInterval = 200 * time.Millisecond
+
+	// fired keys per-call events we've already emitted. CallID is the
+	// natural dedup key: unique per voip_patrol call, stable across
+	// re-reads of the same results.json. Fallback for rows without a
+	// CallID (shouldn't happen for `action:"call"` but defensive) is
+	// a label+start composite — close enough to be unique in practice.
+	fired := make(map[string]struct{})
+	keyOf := func(c models.CallResult) string {
+		if c.CallID != "" {
+			return c.CallID
+		}
+		return c.Label + "|" + c.Start
+	}
+
+	scan := func() {
+		f, err := os.Open(path)
+		if err != nil {
+			// File not there yet (voip_patrol hasn't created it) or
+			// some other IO error — try again next tick.
+			return
+		}
+		defer f.Close()
+		dec := json.NewDecoder(f)
+		for {
+			var c models.CallResult
+			if err := dec.Decode(&c); err != nil {
+				// EOF or torn tail at the end — stop; next poll re-reads
+				// the whole file and will find any completed rows.
+				return
+			}
+			k := keyOf(c)
+			if _, seen := fired[k]; seen {
+				continue
+			}
+			fired[k] = struct{}{}
+			r.onCallMu.Lock()
+			hooks := append([]func(*models.Run, models.CallResult){}, r.onCall...)
+			r.onCallMu.Unlock()
+			for _, fn := range hooks {
+				fn(run, c)
+			}
+		}
+	}
+
+	t := time.NewTicker(pollInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-stop:
+			// Final sweep: voip_patrol has exited, pick up anything
+			// written between the last tick and process exit.
+			scan()
+			return
+		case <-t.C:
+			scan()
+		}
 	}
 }
 
