@@ -92,6 +92,7 @@
     <th class="text-end" title="Rx / Tx voice duration (ms)">Voice Rx/Tx</th>
     <th class="text-end" title="Rx / Tx level_avg (0..255)">Level avg</th>
     <th class="text-end" title="Rx / Tx level_peak (0..255)">Level peak</th>
+    <th class="text-end" title="Time from call start to voip_patrol's tone detector firing (tone_detected_ms). Blank when no tone was detected.">Tone</th>
     <th>Call-ID</th>
   </tr></thead>
   <tbody>
@@ -120,6 +121,9 @@
       </td>
       <td class="text-end small text-muted">
         {{ with $c.EnergyStats }}{{ if or .Rx.LevelPeak .Tx.LevelPeak }}{{ .Rx.LevelPeak }} / {{ .Tx.LevelPeak }}{{ end }}{{ end }}
+      </td>
+      <td class="text-end small text-muted">
+        {{ if $c.ToneDetectedMs }}{{ $c.ToneDetectedMs }} ms{{ end }}
       </td>
       <td class="font-monospace small text-muted">{{ $c.CallID }}</td>
     </tr>

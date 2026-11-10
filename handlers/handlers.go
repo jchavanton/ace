@@ -264,11 +264,14 @@ func (s *Server) handleScenarioDetail(c *gin.Context) {
 		"VerdictMinTxLevelAvg":   scn.Verdict.MinTxLevelAvg,
 		"VerdictMinRxLevelPeak":  scn.Verdict.MinRxLevelPeak,
 		"VerdictMinTxLevelPeak":  scn.Verdict.MinTxLevelPeak,
-		"VerdictMaxRxLevelPeak":       scn.Verdict.MaxRxLevelPeak,
-		"VerdictMaxTxLevelPeak":       scn.Verdict.MaxTxLevelPeak,
-		"VerdictToneDetectedRequired": scn.Verdict.ToneDetectedRequired,
-		"VerdictMaxToneDetectedMs":    scn.Verdict.MaxToneDetectedMs,
-		"VerdictEnergyStatsMiss":      scn.Verdict.NeedsEnergyStats() && !strings.Contains(xml, "energy_stats=\"true\""),
+		"VerdictMaxRxLevelPeak":    scn.Verdict.MaxRxLevelPeak,
+		"VerdictMaxTxLevelPeak":    scn.Verdict.MaxTxLevelPeak,
+		"VerdictMaxToneDetectedMs": scn.Verdict.MaxToneDetectedMs,
+		// Whether this scenario declares detect_tone="true" — the UI
+		// surfaces this so operators can see that the "tone required"
+		// check will run (derived from XML, not the verdict JSON).
+		"ScenarioHasDetectTone":  strings.Contains(xml, "detect_tone=\"true\""),
+		"VerdictEnergyStatsMiss": scn.Verdict.NeedsEnergyStats() && !strings.Contains(xml, "energy_stats=\"true\""),
 	})
 }
 
@@ -657,16 +660,15 @@ func (s *Server) handleScenarioSave(c *gin.Context) {
 		*f.dst = v
 	}
 	sv := models.ScenarioVerdict{
-		MinRxVoiceMs:         *verdictFields[0].dst,
-		MinTxVoiceMs:         *verdictFields[1].dst,
-		MinRxLevelAvg:        *verdictFields[2].dst,
-		MinTxLevelAvg:        *verdictFields[3].dst,
-		MinRxLevelPeak:       *verdictFields[4].dst,
-		MinTxLevelPeak:       *verdictFields[5].dst,
-		MaxRxLevelPeak:       *verdictFields[6].dst,
-		MaxTxLevelPeak:       *verdictFields[7].dst,
-		ToneDetectedRequired: c.PostForm("tone_detected_required") != "",
-		MaxToneDetectedMs:    *verdictFields[8].dst,
+		MinRxVoiceMs:      *verdictFields[0].dst,
+		MinTxVoiceMs:      *verdictFields[1].dst,
+		MinRxLevelAvg:     *verdictFields[2].dst,
+		MinTxLevelAvg:     *verdictFields[3].dst,
+		MinRxLevelPeak:    *verdictFields[4].dst,
+		MinTxLevelPeak:    *verdictFields[5].dst,
+		MaxRxLevelPeak:    *verdictFields[6].dst,
+		MaxTxLevelPeak:    *verdictFields[7].dst,
+		MaxToneDetectedMs: *verdictFields[8].dst,
 	}
 	if sv.IsZero() {
 		if err := models.DeleteScenarioVerdict(s.Cfg.ScenariosDir, name); err != nil {

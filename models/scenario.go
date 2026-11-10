@@ -175,12 +175,11 @@ type ScenarioVerdict struct {
 	MinTxLevelPeak int `json:"min_tx_level_peak,omitempty"`
 	MaxRxLevelPeak int `json:"max_rx_level_peak,omitempty"`
 	MaxTxLevelPeak int `json:"max_tx_level_peak,omitempty"`
-	// Tone-detector thresholds. Read from CallResult.ToneDetected
-	// (0/1) and ToneDetectedMs (ms from call start to detection).
-	// Pair them: ToneDetectedRequired=true + MaxToneDetectedMs=N
-	// = "a tone must fire within N ms."
-	ToneDetectedRequired bool `json:"tone_detected_required,omitempty"`
-	MaxToneDetectedMs    int  `json:"max_tone_detected_ms,omitempty"`
+	// Tone-detector timing bound. 0 = disabled. Whether a tone is
+	// *required* is derived from the scenario XML (detect_tone="true")
+	// and passed to Apply, so the user doesn't configure the same
+	// thing in two places.
+	MaxToneDetectedMs int `json:"max_tone_detected_ms,omitempty"`
 }
 
 // SamplerPeriodMs is voip_patrol's energy sampler tick period
@@ -312,16 +311,21 @@ func DeleteScenarioVerdict(dir, name string) error {
 // call's Result to FAIL; reason-suffix is "" when there is nothing
 // to append (either the check passed or wasn't configured).
 //
+// hasDetectTone must be true when the scenario action carries
+// detect_tone="true" — then ACE requires tone_detected == 1; otherwise
+// tone status is ignored. This mirrors what the user already declared
+// in the XML, so the verdict JSON doesn't repeat it.
+//
 // Semantics:
-//   - Zero thresholds = no check; returns (true, "").
+//   - Zero thresholds and no detect_tone = no check; returns (true, "").
 //   - Any voice/level threshold on a call with no rtp_stats = fail
 //     (sampler never ran, which is the whole point of configuring it).
 //     Tone checks are independent: they read scalars off the call itself
 //     and work on calls without rtp_stats.
 //   - Thresholds are compared against the call's last rtp_stats block,
 //     which holds the whole call's totals.
-func (v ScenarioVerdict) Apply(call *CallResult) (bool, string) {
-	if v.IsZero() {
+func (v ScenarioVerdict) Apply(call *CallResult, hasDetectTone bool) (bool, string) {
+	if v.IsZero() && !hasDetectTone {
 		return true, ""
 	}
 	// Only call-type actions have RTP; message/register/etc. are
@@ -379,8 +383,8 @@ func (v ScenarioVerdict) Apply(call *CallResult) (bool, string) {
 		reasons = append(reasons, fmt.Sprintf("tx level_peak=%d above max=%d (%d vs %d dBov, clipping)",
 			tx.LevelPeak, v.MaxTxLevelPeak, levelToDBov(tx.LevelPeak), levelToDBov(v.MaxTxLevelPeak)))
 	}
-	if v.ToneDetectedRequired && call.ToneDetected != 1 {
-		reasons = append(reasons, "tone not detected (is detect_tone=\"true\" set on the action?)")
+	if hasDetectTone && call.ToneDetected != 1 {
+		reasons = append(reasons, "tone not detected")
 	}
 	if v.MaxToneDetectedMs > 0 && call.ToneDetectedMs > v.MaxToneDetectedMs {
 		reasons = append(reasons, fmt.Sprintf("tone_detected_ms=%d above max=%dms", call.ToneDetectedMs, v.MaxToneDetectedMs))

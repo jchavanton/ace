@@ -181,14 +181,19 @@
     </div>
   </div>
   <!-- Tone detection: read tone_detected / tone_detected_ms (scalars on
-       CallResult) from voip_patrol's result JSON. Needs detect_tone="true"
-       on the scenario action; works even without energy_stats. -->
+       CallResult) from voip_patrol's result JSON. "Require tone" is
+       implicit — ACE enables the check when the XML has
+       detect_tone="true", so there's nothing to toggle here. Max detect
+       (ms) is the optional timing bound on top. -->
   <div class="row g-3 mt-1">
     <div class="col-md-6">
       <div class="small fw-semibold mb-1">Tone detection</div>
       <div class="row g-2 align-items-center mb-1">
-        <div class="col-5"><label class="col-form-label small text-muted" title="Fail the call if voip_patrol's tone detector never fired (tone_detected != 1). Requires detect_tone=&quot;true&quot; on the action.">Require tone</label></div>
-        <div class="col-auto"><input form="scenario-form" type="checkbox" name="tone_detected_required" value="1" {{ if .VerdictToneDetectedRequired }}checked{{ end }} class="form-check-input"></div>
+        <div class="col-5"><label class="col-form-label small text-muted">Require tone</label></div>
+        <div class="col-auto small">
+          {{ if .ScenarioHasDetectTone }}<span class="badge bg-info-subtle text-info-emphasis">on — <code>detect_tone="true"</code></span>
+          {{ else }}<span class="text-muted">off — set <code>detect_tone="true"</code> on the action to enable</span>{{ end }}
+        </div>
       </div>
       <div class="row g-2 align-items-center">
         <div class="col-5"><label class="col-form-label small text-muted" title="Fail if tone_detected_ms (time from call start to detection) exceeds this. Blank/0 disables.">Max detect (ms)</label></div>

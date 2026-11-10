@@ -60,6 +60,7 @@
     <th class="text-end">MOS Tx</th>
     <th class="text-end" title="Avg Rx voice duration across streams (ms). Blank when energy_stats disabled.">Voice Rx</th>
     <th class="text-end" title="Avg Tx voice duration across streams (ms).">Voice Tx</th>
+    <th class="text-end" title="Max tone_detected_ms across the run's calls. Blank when no call detected a tone.">Tone</th>
     <th>Started</th>
     <th></th>
   </tr></thead>
@@ -86,6 +87,7 @@
       <td class="text-end small text-muted">{{ if .Aggregate.MOSAvgTx }}{{ printf "%.2f" .Aggregate.MOSAvgTx }}{{ end }}</td>
       <td class="text-end small text-muted">{{ if .Aggregate.VoiceAvgRxMs }}{{ .Aggregate.VoiceAvgRxMs }} ms{{ end }}</td>
       <td class="text-end small text-muted">{{ if .Aggregate.VoiceAvgTxMs }}{{ .Aggregate.VoiceAvgTxMs }} ms{{ end }}</td>
+      <td class="text-end small text-muted">{{ if .Aggregate.ToneDetectedMs }}{{ .Aggregate.ToneDetectedMs }} ms{{ end }}</td>
       <td class="small text-muted">{{ .StartedAt.Format "2006-01-02 15:04:05" }}</td>
       <td class="text-end">
         {{ if eq .Status "running" }}

@@ -328,9 +328,11 @@ func (r *Runner) RecoverOrphanedRuns() (int, error) {
 			for i := range calls {
 				explainFailure(&calls[i])
 			}
-			if verdict, _ := models.LoadScenarioVerdict(r.Cfg.ScenariosDir, run.Scenario); !verdict.IsZero() {
+			verdict, _ := models.LoadScenarioVerdict(r.Cfg.ScenariosDir, run.Scenario)
+			hasDetectTone := scenarioHasDetectTone(r.Cfg.ScenariosDir, run.Scenario)
+			if !verdict.IsZero() || hasDetectTone {
 				for i := range calls {
-					if ok, extra := verdict.Apply(&calls[i]); !ok {
+					if ok, extra := verdict.Apply(&calls[i], hasDetectTone); !ok {
 						calls[i].Result = "FAIL"
 						if calls[i].Reason == "" {
 							calls[i].Reason = extra
@@ -686,9 +688,11 @@ func (r *Runner) execute(ctx context.Context, cancel context.CancelFunc, run *mo
 	// verdict, not voip_patrol's intermediate one. Load failure is
 	// non-fatal — a missing/broken sidecar just means "no extra
 	// checks", matching the ports-sidecar policy.
-	if verdict, _ := models.LoadScenarioVerdict(r.Cfg.ScenariosDir, run.Scenario); !verdict.IsZero() {
+	verdict, _ := models.LoadScenarioVerdict(r.Cfg.ScenariosDir, run.Scenario)
+	hasDetectTone := scenarioHasDetectTone(r.Cfg.ScenariosDir, run.Scenario)
+	if !verdict.IsZero() || hasDetectTone {
 		for i := range calls {
-			if ok, extra := verdict.Apply(&calls[i]); !ok {
+			if ok, extra := verdict.Apply(&calls[i], hasDetectTone); !ok {
 				calls[i].Result = "FAIL"
 				if calls[i].Reason == "" {
 					calls[i].Reason = extra
@@ -837,6 +841,18 @@ func loadVoipPatrolResults(path string) ([]models.CallResult, error) {
 
 // aggregate computes the run-level summary from per-call results.
 // Empty input returns a zero-valued Aggregate.
+// scenarioHasDetectTone returns true when the scenario XML carries
+// detect_tone="true" on any action. Cheap substring match rather than
+// a full XML parse — matches how VerdictEnergyStatsMiss is detected in
+// the handlers. Missing/unreadable file returns false (no check).
+func scenarioHasDetectTone(dir, name string) bool {
+	b, err := os.ReadFile(filepath.Join(dir, name+".xml"))
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(b), "detect_tone=\"true\"")
+}
+
 func aggregate(calls []models.CallResult) models.Aggregate {
 	agg := models.Aggregate{Total: len(calls)}
 	if len(calls) == 0 {
@@ -881,6 +897,9 @@ func aggregate(calls []models.CallResult) models.Aggregate {
 				rttN++
 			}
 			agg.PacketsLossTx += rs.Tx.Loss
+		}
+		if c.ToneDetectedMs > agg.ToneDetectedMs {
+			agg.ToneDetectedMs = c.ToneDetectedMs
 		}
 		// A call counts once, by its whole-call totals (EnergyStats). Zero
 		// everywhere means energy_stats wasn't on this call.

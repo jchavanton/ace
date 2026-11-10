@@ -200,6 +200,10 @@ type Aggregate struct {
 	LevelAvgTx   int `json:"level_avg_tx,omitempty"`
 	LevelPeakRx  int `json:"level_peak_rx,omitempty"`
 	LevelPeakTx  int `json:"level_peak_tx,omitempty"`
+	// ToneDetectedMs is the max tone_detected_ms across the run's calls
+	// (0 = no call fired a tone). Shown on /runs so operators can tell
+	// at a glance whether tone detection worked.
+	ToneDetectedMs int `json:"tone_detected_ms,omitempty"`
 }
 
 // NewRun mints a new Run with a sortable ID and a fresh output dir.
