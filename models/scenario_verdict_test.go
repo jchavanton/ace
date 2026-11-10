@@ -33,3 +33,25 @@ func TestVerdictCeilingSeesTheCallsHighestPeak(t *testing.T) {
 		t.Fatal("a call that peaked at 80 passed max_rx_level_peak=50")
 	}
 }
+
+func TestVerdictPassesWhenToneFiredInTime(t *testing.T) {
+	c := &CallResult{Action: "call", Result: "PASS", ToneDetected: 1, ToneDetectedMs: 3000}
+	v := ScenarioVerdict{ToneDetectedRequired: true, MaxToneDetectedMs: 5000}
+	if ok, why := v.Apply(c); !ok {
+		t.Fatalf("tone at 3s with max=5s failed: %s", why)
+	}
+}
+
+func TestVerdictFailsWhenToneNeverFired(t *testing.T) {
+	c := &CallResult{Action: "call", Result: "PASS"}
+	if ok, _ := (ScenarioVerdict{ToneDetectedRequired: true}).Apply(c); ok {
+		t.Fatal("a call with tone_detected=0 passed tone_detected_required")
+	}
+}
+
+func TestVerdictFailsWhenToneFiredTooLate(t *testing.T) {
+	c := &CallResult{Action: "call", Result: "PASS", ToneDetected: 1, ToneDetectedMs: 8000}
+	if ok, _ := (ScenarioVerdict{MaxToneDetectedMs: 5000}).Apply(c); ok {
+		t.Fatal("a tone at 8s passed max_tone_detected_ms=5000")
+	}
+}

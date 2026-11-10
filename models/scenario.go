@@ -175,6 +175,12 @@ type ScenarioVerdict struct {
 	MinTxLevelPeak int `json:"min_tx_level_peak,omitempty"`
 	MaxRxLevelPeak int `json:"max_rx_level_peak,omitempty"`
 	MaxTxLevelPeak int `json:"max_tx_level_peak,omitempty"`
+	// Tone-detector thresholds. Read from CallResult.ToneDetected
+	// (0/1) and ToneDetectedMs (ms from call start to detection).
+	// Pair them: ToneDetectedRequired=true + MaxToneDetectedMs=N
+	// = "a tone must fire within N ms."
+	ToneDetectedRequired bool `json:"tone_detected_required,omitempty"`
+	MaxToneDetectedMs    int  `json:"max_tone_detected_ms,omitempty"`
 }
 
 // SamplerPeriodMs is voip_patrol's energy sampler tick period
@@ -222,6 +228,16 @@ func levelToDBov(level int) int {
 // IsZero returns true when no checks are configured; callers skip
 // loading/applying the verdict entirely in that case.
 func (v ScenarioVerdict) IsZero() bool { return v == (ScenarioVerdict{}) }
+
+// NeedsEnergyStats reports whether any configured check depends on the
+// energy_stats sampler. Tone checks don't, so a tone-only verdict shouldn't
+// trigger the "missing energy_stats" warning.
+func (v ScenarioVerdict) NeedsEnergyStats() bool {
+	return v.MinRxVoiceMs > 0 || v.MinTxVoiceMs > 0 ||
+		v.MinRxLevelAvg > 0 || v.MinTxLevelAvg > 0 ||
+		v.MinRxLevelPeak > 0 || v.MinTxLevelPeak > 0 ||
+		v.MaxRxLevelPeak > 0 || v.MaxTxLevelPeak > 0
+}
 
 // VerdictPath returns the absolute path to the scenario's sidecar
 // verdict JSON file.
@@ -298,8 +314,10 @@ func DeleteScenarioVerdict(dir, name string) error {
 //
 // Semantics:
 //   - Zero thresholds = no check; returns (true, "").
-//   - Non-zero threshold on a call with no rtp_stats = fail (sampler
-//     never ran, which is the whole point of configuring the verdict).
+//   - Any voice/level threshold on a call with no rtp_stats = fail
+//     (sampler never ran, which is the whole point of configuring it).
+//     Tone checks are independent: they read scalars off the call itself
+//     and work on calls without rtp_stats.
 //   - Thresholds are compared against the call's last rtp_stats block,
 //     which holds the whole call's totals.
 func (v ScenarioVerdict) Apply(call *CallResult) (bool, string) {
@@ -311,15 +329,26 @@ func (v ScenarioVerdict) Apply(call *CallResult) (bool, string) {
 	if call.Action != "call" && call.Action != "accept" {
 		return true, ""
 	}
-	if len(call.RTPStats) == 0 {
+	// rtp_stats is needed only for the voice/level checks; tone checks
+	// read scalars on CallResult itself. If any rtp-dependent threshold
+	// is configured but the sampler never ran, fail with a clear reason.
+	rtpNeeded := v.MinRxVoiceMs > 0 || v.MinTxVoiceMs > 0 ||
+		v.MinRxLevelAvg > 0 || v.MinTxLevelAvg > 0 ||
+		v.MinRxLevelPeak > 0 || v.MinTxLevelPeak > 0 ||
+		v.MaxRxLevelPeak > 0 || v.MaxTxLevelPeak > 0
+	if rtpNeeded && len(call.RTPStats) == 0 {
 		return false, "no rtp_stats produced; is energy_stats=\"true\" set on the action?"
 	}
-	// Peak is the call's running max, avg its call-wide mean (see EnergyStats).
-	last := call.EnergyStats()
-	rx, tx := last.Rx, last.Tx
-	rxMs := rx.VoiceFrames * SamplerPeriodMs
-	txMs := tx.VoiceFrames * SamplerPeriodMs
 	var reasons []string
+	var rx, tx RTPDirection
+	var rxMs, txMs int
+	if len(call.RTPStats) > 0 {
+		// Peak is the call's running max, avg its call-wide mean (see EnergyStats).
+		last := call.EnergyStats()
+		rx, tx = last.Rx, last.Tx
+		rxMs = rx.VoiceFrames * SamplerPeriodMs
+		txMs = tx.VoiceFrames * SamplerPeriodMs
+	}
 	if v.MinRxVoiceMs > 0 && rxMs < v.MinRxVoiceMs {
 		reasons = append(reasons, fmt.Sprintf("rx voice=%dms (%d frames) below min=%dms", rxMs, rx.VoiceFrames, v.MinRxVoiceMs))
 	}
@@ -349,6 +378,12 @@ func (v ScenarioVerdict) Apply(call *CallResult) (bool, string) {
 	if v.MaxTxLevelPeak > 0 && tx.LevelPeak > v.MaxTxLevelPeak {
 		reasons = append(reasons, fmt.Sprintf("tx level_peak=%d above max=%d (%d vs %d dBov, clipping)",
 			tx.LevelPeak, v.MaxTxLevelPeak, levelToDBov(tx.LevelPeak), levelToDBov(v.MaxTxLevelPeak)))
+	}
+	if v.ToneDetectedRequired && call.ToneDetected != 1 {
+		reasons = append(reasons, "tone not detected (is detect_tone=\"true\" set on the action?)")
+	}
+	if v.MaxToneDetectedMs > 0 && call.ToneDetectedMs > v.MaxToneDetectedMs {
+		reasons = append(reasons, fmt.Sprintf("tone_detected_ms=%d above max=%dms", call.ToneDetectedMs, v.MaxToneDetectedMs))
 	}
 	if len(reasons) == 0 {
 		return true, ""

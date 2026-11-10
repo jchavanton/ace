@@ -180,6 +180,23 @@
       </div>
     </div>
   </div>
+  <!-- Tone detection: read tone_detected / tone_detected_ms (scalars on
+       CallResult) from voip_patrol's result JSON. Needs detect_tone="true"
+       on the scenario action; works even without energy_stats. -->
+  <div class="row g-3 mt-1">
+    <div class="col-md-6">
+      <div class="small fw-semibold mb-1">Tone detection</div>
+      <div class="row g-2 align-items-center mb-1">
+        <div class="col-5"><label class="col-form-label small text-muted" title="Fail the call if voip_patrol's tone detector never fired (tone_detected != 1). Requires detect_tone=&quot;true&quot; on the action.">Require tone</label></div>
+        <div class="col-auto"><input form="scenario-form" type="checkbox" name="tone_detected_required" value="1" {{ if .VerdictToneDetectedRequired }}checked{{ end }} class="form-check-input"></div>
+      </div>
+      <div class="row g-2 align-items-center">
+        <div class="col-5"><label class="col-form-label small text-muted" title="Fail if tone_detected_ms (time from call start to detection) exceeds this. Blank/0 disables.">Max detect (ms)</label></div>
+        <div class="col-auto"><input form="scenario-form" type="number" name="max_tone_detected_ms" value="{{ if .VerdictMaxToneDetectedMs }}{{ .VerdictMaxToneDetectedMs }}{{ end }}" min="0" max="86400000" step="100" placeholder="0" class="form-control form-control-sm" style="width:7em"></div>
+        <div class="col-auto small text-muted">6500 = 6.5 s</div>
+      </div>
+    </div>
+  </div>
   {{ if .VerdictEnergyStatsMiss }}
   <div class="alert alert-warning small py-2 mt-2 mb-0">
     Thresholds are set but the scenario XML does not contain
