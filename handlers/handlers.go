@@ -270,10 +270,12 @@ func (s *Server) handleScenarioDetail(c *gin.Context) {
 		"VerdictMaxRxLevelPeak":    scn.Verdict.MaxRxLevelPeak,
 		"VerdictMaxTxLevelPeak":    scn.Verdict.MaxTxLevelPeak,
 		"VerdictMaxToneDetectedMs": scn.Verdict.MaxToneDetectedMs,
-		// Whether this scenario declares detect_tone="true" — the UI
-		// surfaces this so operators can see that the "tone required"
-		// check will run (derived from XML, not the verdict JSON).
-		"ScenarioHasDetectTone":  strings.Contains(xml, "detect_tone=\"true\""),
+		// Whether this scenario declares a non-empty detect_tone — the
+		// UI surfaces this so operators can see that the "tone required"
+		// check will run. voip_patrol takes detect_tone as a
+		// "freq[,duration_ms]" string, not a boolean, so any non-empty
+		// value enables the detector.
+		"ScenarioHasDetectTone":  models.XMLHasDetectTone(xml),
 		"VerdictEnergyStatsMiss": scn.Verdict.NeedsEnergyStats() && !strings.Contains(xml, "energy_stats=\"true\""),
 	})
 }

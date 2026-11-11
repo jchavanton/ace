@@ -182,17 +182,19 @@
   </div>
   <!-- Tone detection: read tone_detected / tone_detected_ms (scalars on
        CallResult) from voip_patrol's result JSON. "Require tone" is
-       implicit — ACE enables the check when the XML has
-       detect_tone="true", so there's nothing to toggle here. Max detect
-       (ms) is the optional timing bound on top. -->
+       implicit — ACE enables the check when the XML has a non-empty
+       detect_tone attribute (voip_patrol's syntax is a comma-separated
+       "freq[,duration_ms]" string, e.g. detect_tone="200,3000"), so
+       there's nothing to toggle here. Max detect (ms) is the optional
+       timing bound on top. -->
   <div class="row g-3 mt-1">
     <div class="col-md-6">
       <div class="small fw-semibold mb-1">Tone detection</div>
       <div class="row g-2 align-items-center mb-1">
         <div class="col-5"><label class="col-form-label small text-muted">Require tone</label></div>
         <div class="col-auto small">
-          {{ if .ScenarioHasDetectTone }}<span class="badge bg-info-subtle text-info-emphasis">on — <code>detect_tone="true"</code></span>
-          {{ else }}<span class="text-muted">off — set <code>detect_tone="true"</code> on the action to enable</span>{{ end }}
+          {{ if .ScenarioHasDetectTone }}<span class="badge bg-info-subtle text-info-emphasis">on — <code>detect_tone</code> set</span>
+          {{ else }}<span class="text-muted">off — set <code>detect_tone="freq[,duration_ms]"</code> on the action to enable</span>{{ end }}
         </div>
       </div>
       <div class="row g-2 align-items-center">

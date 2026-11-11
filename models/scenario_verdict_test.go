@@ -61,3 +61,25 @@ func TestVerdictFailsWhenToneFiredTooLate(t *testing.T) {
 		t.Fatal("a tone at 8s passed max_tone_detected_ms=5000")
 	}
 }
+
+// XMLHasDetectTone is the single source of truth for "does this scenario
+// enable the tone detector?" — both the verdict and the scenario-detail
+// UI read it, so regressions here silently break the Require-tone check.
+func TestXMLHasDetectToneMatchesValueNotLiteralTrue(t *testing.T) {
+	cases := []struct {
+		xml  string
+		want bool
+	}{
+		{`<action type="call" detect_tone="200,3000"/>`, true},  // real voip_patrol syntax
+		{`<action type="call" detect_tone="440"/>`, true},       // freq only
+		{`<action type="call" detect_tone="true"/>`, true},      // historical, still truthy
+		{`<action type="call" detect_tone=""/>`, false},         // empty = disabled
+		{`<action type="call"/>`, false},                        // absent
+		{`<action type="call" ddetect_tone="200,3000"/>`, false}, // disabled-by-typo convention
+	}
+	for _, tc := range cases {
+		if got := XMLHasDetectTone(tc.xml); got != tc.want {
+			t.Errorf("XMLHasDetectTone(%q) = %v, want %v", tc.xml, got, tc.want)
+		}
+	}
+}

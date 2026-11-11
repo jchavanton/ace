@@ -841,16 +841,14 @@ func loadVoipPatrolResults(path string) ([]models.CallResult, error) {
 
 // aggregate computes the run-level summary from per-call results.
 // Empty input returns a zero-valued Aggregate.
-// scenarioHasDetectTone returns true when the scenario XML carries
-// detect_tone="true" on any action. Cheap substring match rather than
-// a full XML parse — matches how VerdictEnergyStatsMiss is detected in
-// the handlers. Missing/unreadable file returns false (no check).
+// scenarioHasDetectTone returns true when the scenario XML enables
+// voip_patrol's tone detector. Missing/unreadable file returns false.
 func scenarioHasDetectTone(dir, name string) bool {
 	b, err := os.ReadFile(filepath.Join(dir, name+".xml"))
 	if err != nil {
 		return false
 	}
-	return strings.Contains(string(b), "detect_tone=\"true\"")
+	return models.XMLHasDetectTone(string(b))
 }
 
 func aggregate(calls []models.CallResult) models.Aggregate {

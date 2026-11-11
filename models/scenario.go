@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -227,6 +228,22 @@ func levelToDBov(level int) int {
 // IsZero returns true when no checks are configured; callers skip
 // loading/applying the verdict entirely in that case.
 func (v ScenarioVerdict) IsZero() bool { return v == (ScenarioVerdict{}) }
+
+// detectToneRE matches detect_tone="<non-empty>" — voip_patrol takes a
+// "freq[,duration_ms]" comma-separated string here, not a boolean, so
+// the check is "attribute present with a non-empty value." The leading
+// (^|\s) anchor rejects the disabled-by-typo convention (ddetect_tone,
+// _detect_tone, etc.) that operators use to comment out an attribute
+// in-place.
+var detectToneRE = regexp.MustCompile(`(^|\s)detect_tone="[^"]+"`)
+
+// XMLHasDetectTone reports whether the scenario XML enables voip_patrol's
+// tone detector on any action. ace uses this both to drive the verdict's
+// implicit "tone required" check and to render the scenario-detail UI
+// indicator.
+func XMLHasDetectTone(xml string) bool {
+	return detectToneRE.MatchString(xml)
+}
 
 // NeedsEnergyStats reports whether any configured check depends on the
 // energy_stats sampler. Tone checks don't, so a tone-only verdict shouldn't
