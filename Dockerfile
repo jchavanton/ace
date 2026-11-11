@@ -15,7 +15,10 @@
 # host's interfaces.
 
 # --- Stage 1: voip_patrol (prebuilt) ------------------------------------------
-FROM jchavanton/voip_patrol:1.0.1 AS voip_patrol_image
+# One source of truth for the version string: ARG here, stamped into
+# ACE_VOIP_PATROL_VERSION in stage 3 so ace can render it in the UI.
+ARG VOIP_PATROL_VERSION=1.0.1
+FROM jchavanton/voip_patrol:${VOIP_PATROL_VERSION} AS voip_patrol_image
 
 # --- Stage 2: ace -------------------------------------------------------------
 FROM golang:1.22-bookworm AS ace_builder
@@ -56,8 +59,12 @@ COPY static /app/static
 RUN mkdir -p /voice_files
 
 WORKDIR /app
+# Re-declare ARG in this stage so the FROM-time value is in scope here;
+# ARGs reset at each FROM in a multi-stage build.
+ARG VOIP_PATROL_VERSION=1.0.1
 ENV ACE_ADDR=0.0.0.0:8086 \
     ACE_VOIP_PATROL_BIN=/usr/local/bin/voip_patrol \
+    ACE_VOIP_PATROL_VERSION=${VOIP_PATROL_VERSION} \
     ACE_SCENARIOS_DIR=/data/scenarios \
     ACE_RUNS_DIR=/data/runs \
     ACE_BOTS_DIR=/data/bots \

@@ -125,6 +125,9 @@ func (s *Server) render(c *gin.Context, status int, data gin.H) {
 		firing, _ := models.FiringBots(s.Cfg.BotsDir)
 		data["FiringCount"] = len(firing)
 	}
+	if _, ok := data["VoipPatrolVersion"]; !ok {
+		data["VoipPatrolVersion"] = s.Cfg.VoipPatrolVersion
+	}
 	c.HTML(status, "layout", data)
 }
 

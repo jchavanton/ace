@@ -29,6 +29,12 @@ type Config struct {
 	// controller will invoke. Required.
 	VoipPatrolBin string
 
+	// VoipPatrolVersion is the image tag the binary was shipped under
+	// (e.g. "1.0.1"), rendered in the admin UI nav. Set from the
+	// -voip-patrol-version flag or $ACE_VOIP_PATROL_VERSION, which the
+	// Dockerfile stamps in from the build ARG. Empty = hide from UI.
+	VoipPatrolVersion string
+
 	// VoipPatrolPort is the default local SIP port voip_patrol binds for
 	// each run. Overridable per-run via the Run form. The same port is
 	// reused across runs since runs are serialized (one at a time) in v1.
@@ -167,6 +173,7 @@ func FromFlags() *Config {
 	c := &Config{}
 	flag.StringVar(&c.Addr, "addr", "0.0.0.0:8086", "HTTP bind address")
 	flag.StringVar(&c.VoipPatrolBin, "voip-patrol-bin", "/usr/local/bin/voip_patrol", "path to voip_patrol binary")
+	flag.StringVar(&c.VoipPatrolVersion, "voip-patrol-version", os.Getenv("ACE_VOIP_PATROL_VERSION"), "voip_patrol version string shown in the UI nav; defaults to $ACE_VOIP_PATROL_VERSION (stamped in by the Dockerfile ARG)")
 	flag.IntVar(&c.VoipPatrolPort, "voip-patrol-port", 5093, "default local SIP port voip_patrol binds (per-run override in UI)")
 	flag.IntVar(&c.RTPPortStart, "rtp-port-start", 4000, "default RTP port range start (per-run override in UI)")
 	flag.IntVar(&c.RTPPortEnd, "rtp-port-end", 14000, "default RTP port range end (per-run override in UI)")
