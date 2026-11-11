@@ -36,7 +36,7 @@
       <li class="nav-item"><a class="nav-link {{ if eq .Page "api-docs" }}active{{ end }}" href="/api-docs">API</a></li>
     </ul>
     {{ if .Busy }}<span class="badge bg-warning text-dark">run in progress</span>{{ end }}
-    {{ if .VoipPatrolVersion }}<small class="text-muted ms-2" title="voip_patrol image tag baked into this ace build">voip_patrol v{{ .VoipPatrolVersion }}</small>{{ end }}
+    {{ if .VoipPatrolVersion }}<small class="text-white-50 ms-2" title="voip_patrol image tag baked into this ace build">voip_patrol v{{ .VoipPatrolVersion }}</small>{{ end }}
   </div>
 </nav>
 <main class="container py-4">
