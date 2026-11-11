@@ -200,10 +200,16 @@ type Aggregate struct {
 	LevelAvgTx   int `json:"level_avg_tx,omitempty"`
 	LevelPeakRx  int `json:"level_peak_rx,omitempty"`
 	LevelPeakTx  int `json:"level_peak_tx,omitempty"`
-	// ToneDetectedMs is the max tone_detected_ms across the run's calls
-	// (0 = no call fired a tone). Shown on /runs so operators can tell
-	// at a glance whether tone detection worked.
-	ToneDetectedMs int `json:"tone_detected_ms,omitempty"`
+	// Tone-detection aggregates across the run's calls. ToneDetectedMs
+	// is the time-to-detection (latency, not tone duration), averaged
+	// across calls that fired a tone. ToneDetectedCalls counts those.
+	// ToneState describes when, in the SIP flow, the tone fired for the
+	// majority of firing calls: "pre-ringback" (< 18x), "ringback" (18x
+	// to before 200), or "after-answer" (>= 200 OK). Empty when no
+	// SIP-latency data was available on any firing call.
+	ToneDetectedMs    int    `json:"tone_detected_ms,omitempty"`
+	ToneDetectedCalls int    `json:"tone_detected_calls,omitempty"`
+	ToneState         string `json:"tone_state,omitempty"`
 }
 
 // NewRun mints a new Run with a sortable ID and a fresh output dir.

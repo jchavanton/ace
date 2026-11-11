@@ -876,6 +876,10 @@ func aggregate(calls []models.CallResult) models.Aggregate {
 		levelPeakRx   = 0
 		levelPeakTx   = 0
 		energyN       = 0
+		// Index 0=after-answer, 1=ringback, 2=pre-ringback. Preferring
+		// the SIP-latest state resolves ties toward "the tone fired
+		// in the most interesting phase" (after-answer > ringback).
+		toneStateCounts [3]int
 	)
 	for _, c := range calls {
 		if strings.EqualFold(c.Result, "PASS") {
@@ -898,8 +902,17 @@ func aggregate(calls []models.CallResult) models.Aggregate {
 			}
 			agg.PacketsLossTx += rs.Tx.Loss
 		}
-		if c.ToneDetectedMs > agg.ToneDetectedMs {
-			agg.ToneDetectedMs = c.ToneDetectedMs
+		if c.ToneDetectedMs > 0 {
+			agg.ToneDetectedCalls++
+			agg.ToneDetectedMs += c.ToneDetectedMs // sum; averaged below
+			switch {
+			case c.SIPLatency.Invite200Ms > 0 && c.ToneDetectedMs >= c.SIPLatency.Invite200Ms:
+				toneStateCounts[0]++ // after-answer
+			case c.SIPLatency.Invite18xMs > 0 && c.ToneDetectedMs >= c.SIPLatency.Invite18xMs:
+				toneStateCounts[1]++ // ringback
+			default:
+				toneStateCounts[2]++ // pre-ringback
+			}
 		}
 		// A call counts once, by its whole-call totals (EnergyStats). Zero
 		// everywhere means energy_stats wasn't on this call.
@@ -936,6 +949,25 @@ func aggregate(calls []models.CallResult) models.Aggregate {
 		agg.LevelAvgTx = levelAvgTxSum / energyN
 		agg.LevelPeakRx = levelPeakRx
 		agg.LevelPeakTx = levelPeakTx
+	}
+	if agg.ToneDetectedCalls > 0 {
+		agg.ToneDetectedMs /= agg.ToneDetectedCalls
+		// Tie-break preference: after-answer > ringback > pre-ringback.
+		// Iterate in that order so the first max wins.
+		best, bestIdx := -1, -1
+		for i, n := range toneStateCounts {
+			if n > best {
+				best, bestIdx = n, i
+			}
+		}
+		switch bestIdx {
+		case 0:
+			agg.ToneState = "after-answer"
+		case 1:
+			agg.ToneState = "ringback"
+		case 2:
+			agg.ToneState = "pre-ringback"
+		}
 	}
 	return agg
 }
