@@ -20,11 +20,6 @@ services:
     container_name: ace
     build:
       context: .
-      additional_contexts:
-        # Bring the voip_patrol source tree in as a build context (read-only).
-        # The Dockerfile's stage 1 does `COPY voip_patrol /git/voip_patrol`,
-        # which resolves to this dir at build time.
-        voip_patrol: ../voip_patrol
       dockerfile: Dockerfile
     network_mode: host
     # NET_ADMIN lets ace program the host's iptables from the /firewall

@@ -1,9 +1,8 @@
 # Multi-stage build for ace + voip_patrol in one image.
 #
-# Stage 1 builds voip_patrol from source (matches the upstream
-# voip_patrol/docker/Dockerfile flow). We copy from the local
-# checkout rather than cloning so any local edits (incl. the
-# vp_call_param null-pointer fix at f92b7eb) ride along.
+# Stage 1 is the upstream voip_patrol release image — we just pull the
+# compiled binary + reference WAVs out of it rather than building from
+# source. Bump the pin when a new voip_patrol tag is out.
 #
 # Stage 2 builds the ace Go binary.
 #
@@ -15,44 +14,8 @@
 # told, ace listens on whatever -addr it's told, both visible on the
 # host's interfaces.
 
-# --- Stage 1: voip_patrol -----------------------------------------------------
-# Source build from the sibling ../voip_patrol checkout — wired via
-# docker-compose.yml's additional_contexts. Whichever branch is checked
-# out locally is the one that ships (currently feat/nameserver-cli for
-# the --nameserver CLI flag). If you switch back to a prebuilt image,
-# also strip the additional_contexts block on the target (ansible does
-# that automatically when ace_use_prebuilt_voip_patrol is true).
-FROM debian:trixie AS voip_patrol_builder
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential libcurl4-openssl-dev cmake pkg-config \
-        libasound2-dev libopus0 libopus-dev libssl-dev libuuid1 uuid-dev \
-        git ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=voip_patrol . /git/voip_patrol
-
-# Scrub stale build artifacts from the local dev checkout so pjproject
-# reconfigures cleanly inside the container (a local ./configure caches
-# the host's autoconf triplet in build.mak, which then makes the in-
-# container build try to link the test suite with the wrong lib search
-# paths — surfaces as "undefined reference to uuid_generate").
-RUN cd /git/voip_patrol \
-    && rm -f pjproject/build.mak pjproject/pjlib/include/pj/config_site.h \
-    && rm -rf pjproject/pjlib/build/output \
-              pjproject/pjlib-util/build/output \
-              pjproject/pjnath/build/output \
-              pjproject/pjmedia/build/output \
-              pjproject/pjsip/build/output \
-              pjproject/third_party/build/output \
-    && rm -f CMakeCache.txt Makefile cmake_install.cmake voip_patrol \
-    && rm -rf CMakeFiles
-
-RUN cd /git/voip_patrol \
-    && cp include/config_site.h pjproject/pjlib/include/pj/config_site.h \
-    && cd pjproject && ./configure --disable-libwebrtc --disable-opencore-amr \
-    && make dep && make -j"$(nproc)" && make install \
-    && cd .. && cmake CMakeLists.txt && make -j"$(nproc)"
+# --- Stage 1: voip_patrol (prebuilt) ------------------------------------------
+FROM jchavanton/voip_patrol:1.0.1 AS voip_patrol_image
 
 # --- Stage 2: ace -------------------------------------------------------------
 FROM golang:1.22-bookworm AS ace_builder
@@ -78,8 +41,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # voip_patrol binary + reference WAVs (needed by some scenarios for the
 # `play` action). Mirror the upstream image's symlink so XML paths like
 # `voice_ref_files/reference_8000.wav` resolve.
-COPY --from=voip_patrol_builder /git/voip_patrol/voip_patrol /usr/local/bin/voip_patrol
-COPY --from=voip_patrol_builder /git/voip_patrol/voice_ref_files /voice_ref_files
+COPY --from=voip_patrol_image /vp/voip_patrol /usr/local/bin/voip_patrol
+COPY --from=voip_patrol_image /vp/voice_ref_files /voice_ref_files
 
 # ace binary + templates + static. We don't bake scenarios or runs into
 # the image; both are bind-mounted from the host in compose.
