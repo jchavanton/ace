@@ -17,9 +17,11 @@
 package main
 
 import (
+	"flag"
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -30,7 +32,46 @@ import (
 )
 
 func main() {
+	// Backfill flags: --reaggregate recomputes every run's Aggregate and
+	// prints a diff; --apply also writes changed run.json files (with a
+	// run.json.bak-<yyyymmdd> sidecar first). One-shot: exits before the
+	// HTTP server starts.
+	reaggregate := flag.Bool("reaggregate", false, "recompute Aggregate for every run on disk and exit; dry-run unless --apply")
+	reaggregateApply := flag.Bool("apply", false, "with --reaggregate: actually write changed run.json files (default dry-run)")
+
 	cfg := config.FromFlags()
+
+	if *reaggregate {
+		runner := &controller.Runner{Cfg: cfg}
+		results, err := runner.ReaggregateRuns(*reaggregateApply)
+		if err != nil {
+			log.Fatalf("ace: reaggregate: %v", err)
+		}
+		mode := "dry-run"
+		if *reaggregateApply {
+			mode = "APPLY"
+		}
+		changed, errored := 0, 0
+		for _, r := range results {
+			if r.Error != nil {
+				errored++
+				log.Printf("[%s] %s: error: %v", mode, r.ID, r.Error)
+				continue
+			}
+			if r.Skipped != "" {
+				continue
+			}
+			if r.Changed {
+				changed++
+				log.Printf("[%s] %s: %s", mode, r.ID, r.Diff())
+			}
+		}
+		log.Printf("[%s] %d runs, %d changed, %d errored", mode, len(results), changed, errored)
+		if errored > 0 {
+			os.Exit(1)
+		}
+		return
+	}
 
 	r := gin.Default()
 	// `mul` lets templates convert voip_patrol's voice_frames (100 ms
