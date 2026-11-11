@@ -201,12 +201,12 @@ type Aggregate struct {
 	LevelPeakRx  int `json:"level_peak_rx,omitempty"`
 	LevelPeakTx  int `json:"level_peak_tx,omitempty"`
 	// Tone-detection aggregates across the run's calls. ToneDetectedMs
-	// is the time-to-detection (latency, not tone duration), averaged
+	// is the time-to-detection (measured from first media, not INVITE —
+	// voip_patrol only starts the counter on 18x/200 SDP), averaged
 	// across calls that fired a tone. ToneDetectedCalls counts those.
-	// ToneState describes when, in the SIP flow, the tone fired for the
-	// majority of firing calls: "pre-ringback" (< 18x), "ringback" (18x
-	// to before 200), or "after-answer" (>= 200 OK). Empty when no
-	// SIP-latency data was available on any firing call.
+	// ToneState is the majority call state when the tone fired:
+	// "ringing" (during early media) or "connected" (after 200 OK).
+	// Empty when no SIP-latency data was available on any firing call.
 	ToneDetectedMs    int    `json:"tone_detected_ms,omitempty"`
 	ToneDetectedCalls int    `json:"tone_detected_calls,omitempty"`
 	ToneState         string `json:"tone_state,omitempty"`

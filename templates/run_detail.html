@@ -85,10 +85,9 @@
     <div class="text-muted small">Time to tone (avg)</div>
     <div class="h4">{{ .Aggregate.ToneDetectedMs }} ms</div>
     <div class="small text-muted">
-      detected
-      {{ if eq .Aggregate.ToneState "after-answer" }}<span class="badge bg-success-subtle text-success-emphasis">after answer</span>
-      {{ else if eq .Aggregate.ToneState "ringback" }}<span class="badge bg-info-subtle text-info-emphasis">during ringback</span>
-      {{ else if eq .Aggregate.ToneState "pre-ringback" }}<span class="badge bg-warning-subtle text-warning-emphasis">pre-ringback</span>
+      detected while
+      {{ if eq .Aggregate.ToneState "connected" }}<span class="badge bg-success-subtle text-success-emphasis">connected</span>
+      {{ else if eq .Aggregate.ToneState "ringing" }}<span class="badge bg-info-subtle text-info-emphasis">ringing</span>
       {{ end }}
       · {{ .Aggregate.ToneDetectedCalls }} of {{ .Aggregate.Total }} call{{ if gt .Aggregate.Total 1 }}s{{ end }}
     </div>

@@ -876,10 +876,10 @@ func aggregate(calls []models.CallResult) models.Aggregate {
 		levelPeakRx   = 0
 		levelPeakTx   = 0
 		energyN       = 0
-		// Index 0=after-answer, 1=ringback, 2=pre-ringback. Preferring
-		// the SIP-latest state resolves ties toward "the tone fired
-		// in the most interesting phase" (after-answer > ringback).
-		toneStateCounts [3]int
+		// Index 0=connected, 1=ringing. Ties prefer connected on the
+		// theory that an answered-and-tone call is the more notable
+		// operational case.
+		toneStateCounts [2]int
 	)
 	for _, c := range calls {
 		if strings.EqualFold(c.Result, "PASS") {
@@ -905,13 +905,22 @@ func aggregate(calls []models.CallResult) models.Aggregate {
 		if c.ToneDetectedMs > 0 {
 			agg.ToneDetectedCalls++
 			agg.ToneDetectedMs += c.ToneDetectedMs // sum; averaged below
+			// tone_detected_ms is measured from first media (18x with
+			// SDP, or 200 if no early media), not from INVITE. So the
+			// media window is invite200Ms - invite18xMs — and anything
+			// exceeding that window means the tone fired after answer.
+			x18, x200 := c.SIPLatency.Invite18xMs, c.SIPLatency.Invite200Ms
 			switch {
-			case c.SIPLatency.Invite200Ms > 0 && c.ToneDetectedMs >= c.SIPLatency.Invite200Ms:
-				toneStateCounts[0]++ // after-answer
-			case c.SIPLatency.Invite18xMs > 0 && c.ToneDetectedMs >= c.SIPLatency.Invite18xMs:
-				toneStateCounts[1]++ // ringback
-			default:
-				toneStateCounts[2]++ // pre-ringback
+			case x18 > 0 && x200 > 0:
+				if c.ToneDetectedMs > (x200 - x18) {
+					toneStateCounts[0]++ // connected
+				} else {
+					toneStateCounts[1]++ // ringing
+				}
+			case x18 == 0 && x200 > 0:
+				toneStateCounts[0]++ // connected (no early media)
+			case x18 > 0 && x200 == 0:
+				toneStateCounts[1]++ // ringing (never answered)
 			}
 		}
 		// A call counts once, by its whole-call totals (EnergyStats). Zero
@@ -952,8 +961,8 @@ func aggregate(calls []models.CallResult) models.Aggregate {
 	}
 	if agg.ToneDetectedCalls > 0 {
 		agg.ToneDetectedMs /= agg.ToneDetectedCalls
-		// Tie-break preference: after-answer > ringback > pre-ringback.
-		// Iterate in that order so the first max wins.
+		// Tie-break preference: connected > ringing. Iterate in that
+		// order so the first max wins.
 		best, bestIdx := -1, -1
 		for i, n := range toneStateCounts {
 			if n > best {
@@ -962,11 +971,9 @@ func aggregate(calls []models.CallResult) models.Aggregate {
 		}
 		switch bestIdx {
 		case 0:
-			agg.ToneState = "after-answer"
+			agg.ToneState = "connected"
 		case 1:
-			agg.ToneState = "ringback"
-		case 2:
-			agg.ToneState = "pre-ringback"
+			agg.ToneState = "ringing"
 		}
 	}
 	return agg
