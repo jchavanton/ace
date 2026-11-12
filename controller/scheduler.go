@@ -136,8 +136,13 @@ func (s *Scheduler) fire(b *models.Bot, now time.Time) {
 		Transport:      scn.Ports.Transport,
 		Nameservers:    scn.Ports.Nameservers,
 	}
+	// started_by names the specific bot ("bot:<name>") so the Bot
+	// Report page can find its own runs via metrics labels (same
+	// pattern the autorun path uses with "auto"). trigger keeps the
+	// same value for audit continuity — historically some callers
+	// read either field.
 	trigger := "bot:" + b.Name
-	run, err := s.Runner.StartWithTrigger(scn, "scheduler", trigger, ports)
+	run, err := s.Runner.StartWithTrigger(scn, trigger, trigger, ports)
 	if err != nil {
 		// Port collision or similar — leave NextRunAt in the past a bit
 		// so the next tick retries quickly, but not immediately (avoids
