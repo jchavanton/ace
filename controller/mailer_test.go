@@ -48,9 +48,10 @@ func TestBuildAlertBody(t *testing.T) {
 			},
 		},
 	}
-	body := buildAlertBody("https://ace.example.com", "dev", run, "FAIL 1/1")
+	body := buildAlertBody("https://ace.example.com", "ovh5", "198.27.75.7", "dev", run, "FAIL 1/1")
 
 	wants := []string{
+		"Host: ovh5 (198.27.75.7)",
 		"Bot: dev",
 		"Scenario: sbc_dev_julien",
 		"Run: 20260922-214009-sbc_dev_julien",
@@ -81,11 +82,40 @@ func TestBuildAlertBody(t *testing.T) {
 	t.Logf("sample rendered body:\n%s", body)
 }
 
+// TestBuildHostAlertBodyIncludesHostIdentity ensures host-level alerts
+// (CPU/mem/disk, which fire through buildHostAlertBody — not
+// buildAlertBody) show which ace box they came from. This was
+// originally missing and sent operators running CSI on which deploy
+// had tipped over.
+func TestBuildHostAlertBodyIncludesHostIdentity(t *testing.T) {
+	body := buildHostAlertBody("https://ace.example.com", "ace-client-stg", "15.156.167.41", "host:cpu", "CPU busy 100.0% >= 85% threshold")
+	wants := []string{
+		"Host: ace-client-stg (15.156.167.41)",
+		"Host check: host:cpu",
+		"Reason: CPU busy 100.0% >= 85% threshold",
+		"https://ace.example.com/monitoring",
+	}
+	for _, w := range wants {
+		if !strings.Contains(body, w) {
+			t.Errorf("body missing %q\n--- body ---\n%s", w, body)
+		}
+	}
+}
+
+// TestBuildHostAlertBodySkipsHostLineWhenEmpty — don't render an
+// orphan "Host:" when neither hostname nor IP is known.
+func TestBuildHostAlertBodySkipsHostLineWhenEmpty(t *testing.T) {
+	body := buildHostAlertBody("", "", "", "host:cpu", "r")
+	if strings.Contains(body, "Host:") {
+		t.Errorf("empty hostname+ip should not produce Host: line:\n%s", body)
+	}
+}
+
 // TestBuildAlertBodyNoLink verifies the link is omitted when the base
 // URL is empty (the LAN deploy case where there's no external hostname).
 func TestBuildAlertBodyNoLink(t *testing.T) {
 	run := &models.Run{ID: "x", Scenario: "s", Status: "done"}
-	body := buildAlertBody("", "b", run, "recovered")
+	body := buildAlertBody("", "", "", "b", run, "recovered")
 	if strings.Contains(body, "http") {
 		t.Errorf("body should not contain a URL when base is empty:\n%s", body)
 	}

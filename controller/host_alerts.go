@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -285,7 +286,7 @@ func (h *HostMonitor) send(cfg models.AlertConfig, key, reason, transitionKind s
 		prefix = "[ace]"
 	}
 	subject := fmt.Sprintf("%s %s", prefix, key)
-	body := buildHostAlertBody(h.Cfg.PublicBaseURL, key, reason)
+	body := buildHostAlertBody(h.Cfg.PublicBaseURL, h.Cfg.Hostname, h.Cfg.DetectedPublicIP, key, reason)
 	if err := SendAlertEmail(cfg, subject, body); err != nil {
 		log.Printf("ace: host monitor: send email: %v", err)
 		h.append(key, time.Now().UTC(), "email failed: "+err.Error())
@@ -294,11 +295,25 @@ func (h *HostMonitor) send(cfg models.AlertConfig, key, reason, transitionKind s
 
 // buildHostAlertBody is the mailer.go counterpart for run-free host
 // alerts. Short on purpose — the operator should land on /monitoring
-// for the chart.
-func buildHostAlertBody(publicBaseURL, key, reason string) string {
-	body := fmt.Sprintf("Host check: %s\nReason: %s\nTime: %s\n", key, reason, time.Now().UTC().Format(time.RFC3339))
-	if publicBaseURL != "" {
-		body += fmt.Sprintf("\n%s/monitoring\n", publicBaseURL)
+// for the chart. Hostname + public IP are rendered when available so
+// the recipient can tell which box fired the alert (relevant when a
+// recipient list is shared across multiple ace deployments).
+func buildHostAlertBody(publicBaseURL, hostname, publicIP, key, reason string) string {
+	var b strings.Builder
+	if hostname != "" || publicIP != "" {
+		b.WriteString("Host: ")
+		switch {
+		case hostname != "" && publicIP != "":
+			fmt.Fprintf(&b, "%s (%s)\n", hostname, publicIP)
+		case hostname != "":
+			fmt.Fprintf(&b, "%s\n", hostname)
+		default:
+			fmt.Fprintf(&b, "%s\n", publicIP)
+		}
 	}
-	return body
+	fmt.Fprintf(&b, "Host check: %s\nReason: %s\nTime: %s\n", key, reason, time.Now().UTC().Format(time.RFC3339))
+	if publicBaseURL != "" {
+		fmt.Fprintf(&b, "\n%s/monitoring\n", publicBaseURL)
+	}
+	return b.String()
 }

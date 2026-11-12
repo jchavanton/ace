@@ -57,8 +57,21 @@ func SendAlertEmail(cfg models.AlertConfig, subject, body string) error {
 // sections: header, aggregate, per-call breakdown (only failing calls
 // when the run has many results, keeping the mail readable), and a
 // link to the run detail page when a base URL is configured.
-func buildAlertBody(publicBaseURL, botName string, run *models.Run, reason string) string {
+// hostname/publicIP identify the ace box that fired the alert; both
+// optional — we skip the Host: line when both are empty.
+func buildAlertBody(publicBaseURL, hostname, publicIP, botName string, run *models.Run, reason string) string {
 	var b strings.Builder
+	if hostname != "" || publicIP != "" {
+		b.WriteString("Host: ")
+		switch {
+		case hostname != "" && publicIP != "":
+			fmt.Fprintf(&b, "%s (%s)\n", hostname, publicIP)
+		case hostname != "":
+			fmt.Fprintf(&b, "%s\n", hostname)
+		default:
+			fmt.Fprintf(&b, "%s\n", publicIP)
+		}
+	}
 	fmt.Fprintf(&b, "Bot: %s\n", botName)
 	fmt.Fprintf(&b, "Scenario: %s\n", run.Scenario)
 	fmt.Fprintf(&b, "Run: %s\n", run.ID)

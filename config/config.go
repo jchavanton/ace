@@ -35,6 +35,13 @@ type Config struct {
 	// Dockerfile stamps in from the build ARG. Empty = hide from UI.
 	VoipPatrolVersion string
 
+	// Hostname is the OS hostname of the box running ace, captured at
+	// startup. Surfaced in alert emails so recipients can tell which
+	// host fired the alert (relevant when multiple ace deployments share
+	// a recipient list). Falls back to empty on uname failure — callers
+	// should tolerate it and skip the Host: line.
+	Hostname string
+
 	// VoipPatrolPort is the default local SIP port voip_patrol binds for
 	// each run. Overridable per-run via the Run form. The same port is
 	// reused across runs since runs are serialized (one at a time) in v1.
@@ -242,6 +249,10 @@ func FromFlags() *Config {
 	if c.DetectedPublicIP == "" && c.PublicAddress != "" && net.ParseIP(c.PublicAddress) != nil {
 		c.DetectedPublicIP = c.PublicAddress
 	}
+
+	// os.Hostname is best-effort; an error here just leaves the field
+	// empty and alert bodies skip the Host: line.
+	c.Hostname, _ = os.Hostname()
 
 	return c
 }

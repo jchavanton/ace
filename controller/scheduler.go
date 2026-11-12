@@ -323,7 +323,7 @@ func (s *Scheduler) sendEmail(cfg models.AlertConfig, botName string, run *model
 		prefix = "[ace]"
 	}
 	subject := fmt.Sprintf("%s %s (%s)", prefix, botName, run.Scenario)
-	body := buildAlertBody(s.Cfg.PublicBaseURL, botName, run, reason)
+	body := buildAlertBody(s.Cfg.PublicBaseURL, s.Cfg.Hostname, s.Cfg.DetectedPublicIP, botName, run, reason)
 	if err := SendAlertEmail(cfg, subject, body); err != nil {
 		log.Printf("ace: bot %q: send email: %v", botName, err)
 		// Record the delivery failure in history so the operator can see
