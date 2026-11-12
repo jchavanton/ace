@@ -20,3 +20,9 @@
 # host list; the committed inventory.example.yml is the schema and
 # shared baseline — copy to inventory.yml after cloning and edit.
 /ansible/inventory.yml
+
+# Per-host ansible overrides. host_vars files can contain sensitive
+# per-host secrets (htpasswd hashes, API keys) that don't belong in
+# group_vars (which applies to every host in the group). Each operator
+# maintains their own, like inventory.yml.
+/ansible/host_vars/
