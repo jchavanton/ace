@@ -51,6 +51,7 @@
 {{- else if eq .ContentTemplate "content_api_docs" -}}     {{ template "content_api_docs" . }}
 {{- else if eq .ContentTemplate "content_monitoring" -}}   {{ template "content_monitoring" . }}
 {{- else if eq .ContentTemplate "content_scenario_rename" -}} {{ template "content_scenario_rename" . }}
+{{- else if eq .ContentTemplate "content_scenario_copy" -}} {{ template "content_scenario_copy" . }}
 {{- else if eq .ContentTemplate "content_bot_rename" -}}   {{ template "content_bot_rename" . }}
 {{- end -}}
 </main>

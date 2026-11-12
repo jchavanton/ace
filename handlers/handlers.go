@@ -50,6 +50,8 @@ func (s *Server) Register(r *gin.Engine) {
 	r.POST("/scenarios/:name/delete", s.handleScenarioDelete)
 	r.GET("/scenarios/:name/rename", s.handleScenarioRenameForm)
 	r.POST("/scenarios/:name/rename", s.handleScenarioRename)
+	r.GET("/scenarios/:name/copy", s.handleScenarioCopyForm)
+	r.POST("/scenarios/:name/copy", s.handleScenarioCopy)
 	r.POST("/scenarios/:name/run", s.handleRun)
 	r.POST("/api/scenarios/:name/run", apiLog, s.handleAPIRun)
 	r.GET("/api/runs/:id", apiLog, s.handleAPIRunStatus)
@@ -857,6 +859,75 @@ func (s *Server) handleScenarioRename(c *gin.Context) {
 		}
 	}
 	c.Redirect(http.StatusSeeOther, "/scenarios/"+newName)
+}
+
+// handleScenarioCopyForm renders the standalone copy page — a plain GET
+// so the Copy button is a link, matching the Rename flow.
+func (s *Server) handleScenarioCopyForm(c *gin.Context) {
+	name := sanitizeScenarioName(c.Param("name"))
+	if name == "" {
+		c.String(http.StatusBadRequest, "invalid name")
+		return
+	}
+	scn, err := models.LoadScenario(s.Cfg.ScenariosDir, name)
+	if err != nil {
+		c.String(http.StatusNotFound, "scenario %q: %v", name, err)
+		return
+	}
+	s.render(c, http.StatusOK, gin.H{
+		"Title":           "Copy " + scn.Name,
+		"Page":            "scenarios",
+		"ContentTemplate": "content_scenario_copy",
+		"Scenario":        scn,
+	})
+}
+
+// handleScenarioCopy duplicates a scenario's XML and sidecars under a
+// new name. Unlike rename, copying a currently-running scenario is
+// fine — the read is a one-shot snapshot and the new file is
+// independent. Refuses if the destination already exists.
+func (s *Server) handleScenarioCopy(c *gin.Context) {
+	srcName := sanitizeScenarioName(c.Param("name"))
+	if srcName == "" {
+		c.String(http.StatusBadRequest, "invalid name")
+		return
+	}
+	dstName := sanitizeScenarioName(c.PostForm("new_name"))
+	if dstName == "" {
+		c.String(http.StatusBadRequest, "new_name required (letters, digits, _ and - only)")
+		return
+	}
+	if dstName == srcName {
+		c.String(http.StatusBadRequest, "new_name must differ from source")
+		return
+	}
+	srcPath := filepath.Join(s.Cfg.ScenariosDir, srcName+".xml")
+	srcBytes, err := os.ReadFile(srcPath)
+	if err != nil {
+		c.String(http.StatusNotFound, "scenario %q does not exist", srcName)
+		return
+	}
+	dstPath := filepath.Join(s.Cfg.ScenariosDir, dstName+".xml")
+	if _, err := os.Stat(dstPath); err == nil {
+		c.String(http.StatusConflict, "scenario %q already exists", dstName)
+		return
+	}
+	if err := os.WriteFile(dstPath, srcBytes, 0o644); err != nil {
+		c.String(http.StatusInternalServerError, "write xml: %v", err)
+		return
+	}
+	// Sidecars: best-effort. Missing source sidecar is the normal case
+	// (not every scenario has saved ports/verdict). Copy errors on
+	// present ones are non-fatal — the operator can re-save via the UI.
+	for _, suffix := range []string{".ports.json", ".verdict.json"} {
+		src := filepath.Join(s.Cfg.ScenariosDir, srcName+suffix)
+		b, err := os.ReadFile(src)
+		if err != nil {
+			continue
+		}
+		_ = os.WriteFile(filepath.Join(s.Cfg.ScenariosDir, dstName+suffix), b, 0o644)
+	}
+	c.Redirect(http.StatusSeeOther, "/scenarios/"+dstName)
 }
 
 // handleRunStop asks the runner to kill the currently-executing
