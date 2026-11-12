@@ -17,7 +17,7 @@
 # --- Stage 1: voip_patrol (prebuilt) ------------------------------------------
 # One source of truth for the version string: ARG here, stamped into
 # ACE_VOIP_PATROL_VERSION in stage 3 so ace can render it in the UI.
-ARG VOIP_PATROL_VERSION=1.0.1
+ARG VOIP_PATROL_VERSION=1.0.2
 FROM jchavanton/voip_patrol:${VOIP_PATROL_VERSION} AS voip_patrol_image
 
 # --- Stage 2: ace -------------------------------------------------------------
@@ -61,7 +61,7 @@ RUN mkdir -p /voice_files
 WORKDIR /app
 # Re-declare ARG in this stage so the FROM-time value is in scope here;
 # ARGs reset at each FROM in a multi-stage build.
-ARG VOIP_PATROL_VERSION=1.0.1
+ARG VOIP_PATROL_VERSION=1.0.2
 ENV ACE_ADDR=0.0.0.0:8086 \
     ACE_VOIP_PATROL_BIN=/usr/local/bin/voip_patrol \
     ACE_VOIP_PATROL_VERSION=${VOIP_PATROL_VERSION} \
