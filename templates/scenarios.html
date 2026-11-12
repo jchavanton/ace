@@ -48,15 +48,13 @@
       <td class="text-end small text-muted">{{ .SizeBytes }} B</td>
       <td class="small text-muted">{{ .ModTime.Format "2006-01-02 15:04:05" }}</td>
       <td class="text-end text-nowrap">
-        <div class="btn-group btn-group-sm" role="group">
-          <form method="post" action="/scenarios/{{ .Name }}/run" class="d-inline">
-            <button type="submit" class="btn btn-sm btn-primary">Run</button>
-          </form>
-          <a href="/scenarios/{{ .Name }}/copy" class="btn btn-sm btn-outline-secondary">Copy</a>
-          <form method="post" action="/scenarios/{{ .Name }}/delete" class="d-inline" onsubmit="return confirm('Delete scenario {{ .Name }}?');">
-            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
-          </form>
-        </div>
+        <form method="post" action="/scenarios/{{ .Name }}/run" class="d-inline">
+          <button type="submit" class="btn btn-xs btn-outline-primary">Run</button>
+        </form>
+        <a href="/scenarios/{{ .Name }}/copy" class="btn btn-xs btn-outline-secondary">Copy</a>
+        <form method="post" action="/scenarios/{{ .Name }}/delete" class="d-inline" onsubmit="return confirm('Delete scenario {{ .Name }}?');">
+          <button type="submit" class="btn btn-xs btn-outline-danger">Delete</button>
+        </form>
       </td>
     </tr>
   {{ end }}
